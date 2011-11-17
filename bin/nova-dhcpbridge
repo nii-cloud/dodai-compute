@@ -1,0 +1,132 @@
+#!/usr/bin/env python
+# vim: tabstop=4 shiftwidth=4 softtabstop=4
+
+# Copyright 2010 United States Government as represented by the
+# Administrator of the National Aeronautics and Space Administration.
+# All Rights Reserved.
+#
+#    Licensed under the Apache License, Version 2.0 (the "License"); you may
+#    not use this file except in compliance with the License. You may obtain
+#    a copy of the License at
+#
+#         http://www.apache.org/licenses/LICENSE-2.0
+#
+#    Unless required by applicable law or agreed to in writing, software
+#    distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+#    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+#    License for the specific language governing permissions and limitations
+#    under the License.
+
+"""
+Handle lease database updates from DHCP servers.
+"""
+
+import gettext
+import os
+import sys
+
+# If ../nova/__init__.py exists, add ../ to Python search path, so that
+# it will override what happens to be installed in /usr/(local/)lib/python...
+possible_topdir = os.path.normpath(os.path.join(os.path.abspath(sys.argv[0]),
+                                   os.pardir,
+                                   os.pardir))
+if os.path.exists(os.path.join(possible_topdir, 'nova', '__init__.py')):
+    sys.path.insert(0, possible_topdir)
+
+gettext.install('nova', unicode=1)
+
+from nova import context
+from nova import db
+from nova import flags
+from nova import log as logging
+from nova import rpc
+from nova import utils
+from nova.network import linux_net
+
+FLAGS = flags.FLAGS
+flags.DECLARE('auth_driver', 'nova.auth.manager')
+flags.DECLARE('network_size', 'nova.network.manager')
+flags.DECLARE('num_networks', 'nova.network.manager')
+flags.DECLARE('update_dhcp_on_disassociate', 'nova.network.manager')
+
+LOG = logging.getLogger('nova.dhcpbridge')
+
+
+def add_lease(mac, ip_address):
+    """Set the IP that was assigned by the DHCP server."""
+    if FLAGS.fake_rabbit:
+        LOG.debug(_("leasing ip"))
+        network_manager = utils.import_object(FLAGS.network_manager)
+        network_manager.lease_fixed_ip(context.get_admin_context(),
+                                       ip_address)
+    else:
+        rpc.cast(context.get_admin_context(),
+                 "%s.%s" % (FLAGS.network_topic, FLAGS.host),
+                 {"method": "lease_fixed_ip",
+                  "args": {"address": ip_address}})
+
+
+def old_lease(mac, ip_address):
+    """Update just as add lease."""
+    LOG.debug(_("Adopted old lease or got a change of mac"))
+    add_lease(mac, ip_address)
+
+
+def del_lease(mac, ip_address):
+    """Called when a lease expires."""
+    if FLAGS.fake_rabbit:
+        LOG.debug(_("releasing ip"))
+        network_manager = utils.import_object(FLAGS.network_manager)
+        network_manager.release_fixed_ip(context.get_admin_context(),
+                                         ip_address)
+    else:
+        rpc.cast(context.get_admin_context(),
+                 "%s.%s" % (FLAGS.network_topic, FLAGS.host),
+                 {"method": "release_fixed_ip",
+                  "args": {"address": ip_address}})
+
+
+def init_leases(network_id):
+    """Get the list of hosts for a network."""
+    ctxt = context.get_admin_context()
+    network_ref = db.network_get(ctxt, network_id)
+    return linux_net.get_dhcp_leases(ctxt, network_ref)
+
+
+def main():
+    """Parse environment and arguments and call the approproate action."""
+    flagfile = os.environ.get('FLAGFILE', FLAGS.dhcpbridge_flagfile)
+    utils.default_flagfile(flagfile)
+    argv = FLAGS(sys.argv)
+    logging.setup()
+
+    if int(os.environ.get('TESTING', '0')):
+        from nova.tests import fake_flags
+
+    #if FLAGS.fake_rabbit:
+    #    LOG.debug(_("leasing ip"))
+    #    network_manager = utils.import_object(FLAGS.network_manager)
+    ##    reload(fake_flags)
+    #    from nova.tests import fake_flags
+
+    action = argv[1]
+    if action in ['add', 'del', 'old']:
+        mac = argv[2]
+        ip = argv[3]
+        msg = _("Called '%(action)s' for mac '%(mac)s' with ip '%(ip)s'") % \
+                    {"action": action,
+                     "mac": mac,
+                     "ip": ip}
+        LOG.debug(msg)
+        globals()[action + '_lease'](mac, ip)
+    else:
+        try:
+            network_id = int(os.environ.get('NETWORK_ID'))
+        except TypeError:
+            LOG.error(_("Environment variable 'NETWORK_ID' must be set."))
+            sys.exit(1)
+
+        print init_leases(network_id)
+
+if __name__ == "__main__":
+    main()

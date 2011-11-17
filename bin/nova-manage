@@ -1,0 +1,2141 @@
+#!/usr/bin/env python
+# vim: tabstop=4 shiftwidth=4 softtabstop=4
+
+# Copyright 2010 United States Government as represented by the
+# Administrator of the National Aeronautics and Space Administration.
+# All Rights Reserved.
+#
+#    Licensed under the Apache License, Version 2.0 (the "License"); you may
+#    not use this file except in compliance with the License. You may obtain
+#    a copy of the License at
+#
+#         http://www.apache.org/licenses/LICENSE-2.0
+#
+#    Unless required by applicable law or agreed to in writing, software
+#    distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+#    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+#    License for the specific language governing permissions and limitations
+#    under the License.
+
+# Interactive shell based on Django:
+#
+# Copyright (c) 2005, the Lawrence Journal-World
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+#     1. Redistributions of source code must retain the above copyright notice,
+#        this list of conditions and the following disclaimer.
+#
+#     2. Redistributions in binary form must reproduce the above copyright
+#        notice, this list of conditions and the following disclaimer in the
+#        documentation and/or other materials provided with the distribution.
+#
+#     3. Neither the name of Django nor the names of its contributors may be
+#        used to endorse or promote products derived from this software without
+#        specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+# "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+# LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+# A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+# OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+# SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+# LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+# DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+# THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
+"""
+  CLI interface for nova management.
+"""
+
+import ast
+import gettext
+import glob
+import json
+import math
+import netaddr
+from optparse import OptionParser
+import os
+import StringIO
+import sys
+import time
+
+
+# If ../nova/__init__.py exists, add ../ to Python search path, so that
+# it will override what happens to be installed in /usr/(local/)lib/python...
+POSSIBLE_TOPDIR = os.path.normpath(os.path.join(os.path.abspath(sys.argv[0]),
+                                   os.pardir,
+                                   os.pardir))
+if os.path.exists(os.path.join(POSSIBLE_TOPDIR, 'nova', '__init__.py')):
+    sys.path.insert(0, POSSIBLE_TOPDIR)
+
+gettext.install('nova', unicode=1)
+
+from nova import context
+from nova import crypto
+from nova import db
+from nova import exception
+from nova import flags
+from nova import image
+from nova import log as logging
+from nova import quota
+from nova import rpc
+from nova import utils
+from nova import version
+from nova import vsa
+from nova.api.ec2 import ec2utils
+from nova.auth import manager
+from nova.cloudpipe import pipelib
+from nova.compute import instance_types
+from nova.db import migration
+from nova.volume import volume_types
+
+FLAGS = flags.FLAGS
+flags.DECLARE('fixed_range', 'nova.network.manager')
+flags.DECLARE('num_networks', 'nova.network.manager')
+flags.DECLARE('network_size', 'nova.network.manager')
+flags.DECLARE('vlan_start', 'nova.network.manager')
+flags.DECLARE('vpn_start', 'nova.network.manager')
+flags.DECLARE('fixed_range_v6', 'nova.network.manager')
+flags.DECLARE('gateway_v6', 'nova.network.manager')
+flags.DECLARE('libvirt_type', 'nova.virt.libvirt.connection')
+flags.DEFINE_flag(flags.HelpFlag())
+flags.DEFINE_flag(flags.HelpshortFlag())
+flags.DEFINE_flag(flags.HelpXMLFlag())
+
+
+# Decorators for actions
+def args(*args, **kwargs):
+    def _decorator(func):
+        func.__dict__.setdefault('options', []).insert(0, (args, kwargs))
+        return func
+    return _decorator
+
+
+def param2id(object_id):
+    """Helper function to convert various id types to internal id.
+    args: [object_id], e.g. 'vol-0000000a' or 'volume-0000000a' or '10'
+    """
+    if '-' in object_id:
+        return ec2utils.ec2_id_to_id(object_id)
+    else:
+        return int(object_id)
+
+
+class VpnCommands(object):
+    """Class for managing VPNs."""
+
+    def __init__(self):
+        self.manager = manager.AuthManager()
+        self.pipe = pipelib.CloudPipe()
+
+    @args('--project', dest="project", metavar='<Project name>',
+            help='Project name')
+    def list(self, project=None):
+        """Print a listing of the VPN data for one or all projects."""
+        print "WARNING: This method only works with deprecated auth"
+        print "%-12s\t" % 'project',
+        print "%-20s\t" % 'ip:port',
+        print "%-20s\t" % 'private_ip',
+        print "%s" % 'state'
+        if project:
+            projects = [self.manager.get_project(project)]
+        else:
+            projects = self.manager.get_projects()
+            # NOTE(vish): This hits the database a lot.  We could optimize
+            #             by getting all networks in one query and all vpns
+            #             in aother query, then doing lookups by project
+        for project in projects:
+            print "%-12s\t" % project.name,
+            ipport = "%s:%s" % (project.vpn_ip, project.vpn_port)
+            print "%-20s\t" % ipport,
+            ctxt = context.get_admin_context()
+            vpn = db.instance_get_project_vpn(ctxt, project.id)
+            if vpn:
+                address = None
+                state = 'down'
+                if vpn.get('fixed_ip', None):
+                    address = vpn['fixed_ip']['address']
+                if project.vpn_ip and utils.vpn_ping(project.vpn_ip,
+                                                     project.vpn_port):
+                    state = 'up'
+                print address,
+                print vpn['host'],
+                print ec2utils.id_to_ec2_id(vpn['id']),
+                print vpn['vm_state'],
+                print state
+            else:
+                print None
+
+    def spawn(self):
+        """Run all VPNs."""
+        print "WARNING: This method only works with deprecated auth"
+        for p in reversed(self.manager.get_projects()):
+            if not self._vpn_for(p.id):
+                print 'spawning %s' % p.id
+                self.pipe.launch_vpn_instance(p.id, p.project_manager_id)
+                time.sleep(10)
+
+    @args('--project', dest="project_id", metavar='<Project name>',
+            help='Project name')
+    @args('--user', dest="user_id", metavar='<user name>', help='User name')
+    def run(self, project_id, user_id):
+        """Start the VPN for a given project and user."""
+        if not user_id:
+            print "WARNING: This method only works with deprecated auth"
+            user_id = self.manager.get_project(project_id).project_manager_id
+        self.pipe.launch_vpn_instance(project_id, user_id)
+
+    @args('--project', dest="project_id", metavar='<Project name>',
+            help='Project name')
+    @args('--ip', dest="ip", metavar='<IP Address>', help='IP Address')
+    @args('--port', dest="port", metavar='<Port>', help='Port')
+    def change(self, project_id, ip, port):
+        """Change the ip and port for a vpn.
+
+        this will update all networks associated with a project
+        not sure if that's the desired behavior or not, patches accepted
+
+        """
+        # TODO(tr3buchet): perhaps this shouldn't update all networks
+        # associated with a project in the future
+        admin_context = context.get_admin_context()
+        networks = db.project_get_networks(admin_context, project_id)
+        for network in networks:
+            db.network_update(admin_context,
+                              network['id'],
+                              {'vpn_public_address': ip,
+                               'vpn_public_port': int(port)})
+
+
+class ShellCommands(object):
+    def bpython(self):
+        """Runs a bpython shell.
+
+        Falls back to Ipython/python shell if unavailable"""
+        self.run('bpython')
+
+    def ipython(self):
+        """Runs an Ipython shell.
+
+        Falls back to Python shell if unavailable"""
+        self.run('ipython')
+
+    def python(self):
+        """Runs a python shell.
+
+        Falls back to Python shell if unavailable"""
+        self.run('python')
+
+    @args('--shell', dest="shell", metavar='<bpython|ipython|python >',
+            help='Python shell')
+    def run(self, shell=None):
+        """Runs a Python interactive interpreter."""
+        if not shell:
+            shell = 'bpython'
+
+        if shell == 'bpython':
+            try:
+                import bpython
+                bpython.embed()
+            except ImportError:
+                shell = 'ipython'
+        if shell == 'ipython':
+            try:
+                import IPython
+                # Explicitly pass an empty list as arguments, because
+                # otherwise IPython would use sys.argv from this script.
+                shell = IPython.Shell.IPShell(argv=[])
+                shell.mainloop()
+            except ImportError:
+                shell = 'python'
+
+        if shell == 'python':
+            import code
+            try:
+                # Try activating rlcompleter, because it's handy.
+                import readline
+            except ImportError:
+                pass
+            else:
+                # We don't have to wrap the following import in a 'try',
+                # because we already know 'readline' was imported successfully.
+                import rlcompleter
+                readline.parse_and_bind("tab:complete")
+            code.interact()
+
+    @args('--path', dest='path', metavar='<path>', help='Script path')
+    def script(self, path):
+        """Runs the script from the specifed path with flags set properly.
+        arguments: path"""
+        exec(compile(open(path).read(), path, 'exec'), locals(), globals())
+
+    @args('--filename', dest='filename', metavar='<path>', default=False,
+          help='Export file path')
+    def export(self, filename):
+        """Export Nova users into a file that can be consumed by Keystone"""
+
+        def create_file(filename):
+            data = generate_data()
+            with open(filename, 'w') as f:
+                f.write(data.getvalue())
+
+        def tenants(data, am):
+            for project in am.get_projects():
+                print >> data, ("tenant add '%s'" %
+                               (project.name))
+                for u in project.member_ids:
+                    user = am.get_user(u)
+                    print >> data, ("user add '%s' '%s' '%s'" %
+                                   (user.name, user.access, project.name))
+                    print >> data, ("credentials add 'EC2' '%s:%s' '%s' '%s'" %
+                            (user.access, project.id, user.secret, project.id))
+
+        def roles(data, am):
+            for role in am.get_roles():
+                print >> data, ("role add '%s'" % (role))
+
+        def grant_roles(data, am):
+            roles = am.get_roles()
+            for project in am.get_projects():
+                for u in project.member_ids:
+                    user = am.get_user(u)
+                    for role in db.user_get_roles_for_project(ctxt, u,
+                                                              project.id):
+                        print >> data, ("role grant '%s', '%s', '%s')," %
+                                       (user.name, role, project.name))
+            print >> data
+
+        def generate_data():
+            data = StringIO.StringIO()
+            am = manager.AuthManager()
+            tenants(data, am)
+            roles(data, am)
+            grant_roles(data, am)
+            data.seek(0)
+            return data
+
+        ctxt = context.get_admin_context()
+        if filename:
+            create_file(filename)
+        else:
+            data = generate_data()
+            print data.getvalue()
+
+
+class RoleCommands(object):
+    """Class for managing roles."""
+
+    def __init__(self):
+        self.manager = manager.AuthManager()
+
+    @args('--user', dest="user", metavar='<user name>', help='User name')
+    @args('--role', dest="role", metavar='<user role>', help='User role')
+    @args('--project', dest="project", metavar='<Project name>',
+            help='Project name')
+    def add(self, user, role, project=None):
+        """adds role to user
+        if project is specified, adds project specific role"""
+        if project:
+            projobj = self.manager.get_project(project)
+            if not projobj.has_member(user):
+                print "%s not a member of %s" % (user, project)
+                return
+        self.manager.add_role(user, role, project)
+
+    @args('--user', dest="user", metavar='<user name>', help='User name')
+    @args('--role', dest="role", metavar='<user role>', help='User role')
+    @args('--project', dest="project", metavar='<Project name>',
+            help='Project name')
+    def has(self, user, role, project=None):
+        """checks to see if user has role
+        if project is specified, returns True if user has
+        the global role and the project role"""
+        print self.manager.has_role(user, role, project)
+
+    @args('--user', dest="user", metavar='<user name>', help='User name')
+    @args('--role', dest="role", metavar='<user role>', help='User role')
+    @args('--project', dest="project", metavar='<Project name>',
+            help='Project name')
+    def remove(self, user, role, project=None):
+        """removes role from user
+        if project is specified, removes project specific role"""
+        self.manager.remove_role(user, role, project)
+
+
+def _db_error(caught_exception):
+    print caught_exception
+    print _("The above error may show that the database has not "
+            "been created.\nPlease create a database using "
+            "'nova-manage db sync' before running this command.")
+    exit(1)
+
+
+class UserCommands(object):
+    """Class for managing users."""
+
+    @staticmethod
+    def _print_export(user):
+        """Print export variables to use with API."""
+        print 'export EC2_ACCESS_KEY=%s' % user.access
+        print 'export EC2_SECRET_KEY=%s' % user.secret
+
+    def __init__(self):
+        self.manager = manager.AuthManager()
+
+    @args('--name', dest="name", metavar='<admin name>', help='Admin name')
+    @args('--access', dest="access", metavar='<access>', help='Access')
+    @args('--secret', dest="secret", metavar='<secret>', help='Secret')
+    def admin(self, name, access=None, secret=None):
+        """creates a new admin and prints exports"""
+        try:
+            user = self.manager.create_user(name, access, secret, True)
+        except exception.DBError, e:
+            _db_error(e)
+        self._print_export(user)
+
+    @args('--name', dest="name", metavar='<name>', help='User name')
+    @args('--access', dest="access", metavar='<access>', help='Access')
+    @args('--secret', dest="secret", metavar='<secret>', help='Secret')
+    def create(self, name, access=None, secret=None):
+        """creates a new user and prints exports"""
+        try:
+            user = self.manager.create_user(name, access, secret, False)
+        except exception.DBError, e:
+            _db_error(e)
+        self._print_export(user)
+
+    @args('--name', dest="name", metavar='<name>', help='User name')
+    def delete(self, name):
+        """deletes an existing user
+        arguments: name"""
+        self.manager.delete_user(name)
+
+    @args('--name', dest="name", metavar='<admin name>', help='User name')
+    def exports(self, name):
+        """prints access and secrets for user in export format"""
+        user = self.manager.get_user(name)
+        if user:
+            self._print_export(user)
+        else:
+            print "User %s doesn't exist" % name
+
+    def list(self):
+        """lists all users"""
+        for user in self.manager.get_users():
+            print user.name
+
+    @args('--name', dest="name", metavar='<name>', help='User name')
+    @args('--access', dest="access_key", metavar='<access>',
+            help='Access key')
+    @args('--secret', dest="secret_key", metavar='<secret>',
+            help='Secret key')
+    @args('--is_admin', dest='is_admin', metavar="<'T'|'F'>",
+            help='Is admin?')
+    def modify(self, name, access_key, secret_key, is_admin):
+        """update a users keys & admin flag
+        arguments: accesskey secretkey admin
+        leave any field blank to ignore it, admin should be 'T', 'F', or blank
+        """
+        if not is_admin:
+            is_admin = None
+        elif is_admin.upper()[0] == 'T':
+            is_admin = True
+        else:
+            is_admin = False
+        self.manager.modify_user(name, access_key, secret_key, is_admin)
+
+    @args('--name', dest="user_id", metavar='<name>', help='User name')
+    @args('--project', dest="project_id", metavar='<Project name>',
+            help='Project name')
+    def revoke(self, user_id, project_id=None):
+        """revoke certs for a user"""
+        if project_id:
+            crypto.revoke_certs_by_user_and_project(user_id, project_id)
+        else:
+            crypto.revoke_certs_by_user(user_id)
+
+
+class ProjectCommands(object):
+    """Class for managing projects."""
+
+    def __init__(self):
+        self.manager = manager.AuthManager()
+
+    @args('--project', dest="project_id", metavar='<Project name>',
+            help='Project name')
+    @args('--user', dest="user_id", metavar='<name>', help='User name')
+    def add(self, project_id, user_id):
+        """Adds user to project"""
+        try:
+            self.manager.add_to_project(user_id, project_id)
+        except exception.UserNotFound as ex:
+            print ex
+            raise
+
+    @args('--project', dest="name", metavar='<Project name>',
+            help='Project name')
+    @args('--user', dest="project_manager", metavar='<user>',
+            help='Project manager')
+    @args('--desc', dest="description", metavar='<description>',
+            help='Description')
+    def create(self, name, project_manager, description=None):
+        """Creates a new project"""
+        try:
+            self.manager.create_project(name, project_manager, description)
+        except exception.UserNotFound as ex:
+            print ex
+            raise
+
+    @args('--project', dest="name", metavar='<Project name>',
+            help='Project name')
+    @args('--user', dest="project_manager", metavar='<user>',
+            help='Project manager')
+    @args('--desc', dest="description", metavar='<description>',
+            help='Description')
+    def modify(self, name, project_manager, description=None):
+        """Modifies a project"""
+        try:
+            self.manager.modify_project(name, project_manager, description)
+        except exception.UserNotFound as ex:
+            print ex
+            raise
+
+    @args('--project', dest="name", metavar='<Project name>',
+            help='Project name')
+    def delete(self, name):
+        """Deletes an existing project"""
+        try:
+            self.manager.delete_project(name)
+        except exception.ProjectNotFound as ex:
+            print ex
+            raise
+
+    @args('--project', dest="project_id", metavar='<Project name>',
+            help='Project name')
+    @args('--user', dest="user_id", metavar='<name>', help='User name')
+    @args('--file', dest="filename", metavar='<filename>',
+            help='File name(Default: novarc)')
+    def environment(self, project_id, user_id, filename='novarc'):
+        """Exports environment variables to an sourcable file"""
+        try:
+            rc = self.manager.get_environment_rc(user_id, project_id)
+        except (exception.UserNotFound, exception.ProjectNotFound) as ex:
+            print ex
+            raise
+        if filename == "-":
+            sys.stdout.write(rc)
+        else:
+            with open(filename, 'w') as f:
+                f.write(rc)
+
+    @args('--user', dest="username", metavar='<username>', help='User name')
+    def list(self, username=None):
+        """Lists all projects"""
+        for project in self.manager.get_projects(username):
+            print project.name
+
+    @args('--project', dest="project_id", metavar='<Project name>',
+            help='Project name')
+    @args('--key', dest="key", metavar='<key>', help='Key')
+    @args('--value', dest="value", metavar='<value>', help='Value')
+    def quota(self, project_id, key=None, value=None):
+        """Set or display quotas for project"""
+        ctxt = context.get_admin_context()
+        if key:
+            if value.lower() == 'unlimited':
+                value = None
+            try:
+                db.quota_update(ctxt, project_id, key, value)
+            except exception.ProjectQuotaNotFound:
+                db.quota_create(ctxt, project_id, key, value)
+        project_quota = quota.get_project_quotas(ctxt, project_id)
+        for key, value in project_quota.iteritems():
+            if value is None:
+                value = 'unlimited'
+            print '%s: %s' % (key, value)
+
+    @args('--project', dest="project_id", metavar='<Project name>',
+            help='Project name')
+    @args('--user', dest="user_id", metavar='<name>', help='User name')
+    def remove(self, project_id, user_id):
+        """Removes user from project"""
+        try:
+            self.manager.remove_from_project(user_id, project_id)
+        except (exception.UserNotFound, exception.ProjectNotFound) as ex:
+            print ex
+            raise
+
+    @args('--project', dest="project_id", metavar='<Project name>',
+            help='Project name')
+    def scrub(self, project_id):
+        """Deletes data associated with project"""
+        admin_context = context.get_admin_context()
+        networks = db.project_get_networks(admin_context, project_id)
+        for network in networks:
+            db.network_disassociate(admin_context, network['id'])
+        groups = db.security_group_get_by_project(admin_context, project_id)
+        for group in groups:
+            db.security_group_destroy(admin_context, group['id'])
+
+    @args('--project', dest="project_id", metavar='<Project name>',
+            help='Project name')
+    @args('--user', dest="user_id", metavar='<name>', help='User name')
+    @args('--file', dest="filename", metavar='<filename>',
+            help='File name(Default: nova.zip)')
+    def zipfile(self, project_id, user_id, filename='nova.zip'):
+        """Exports credentials for project to a zip file"""
+        try:
+            zip_file = self.manager.get_credentials(user_id, project_id)
+            if filename == "-":
+                sys.stdout.write(zip_file)
+            else:
+                with open(filename, 'w') as f:
+                    f.write(zip_file)
+        except (exception.UserNotFound, exception.ProjectNotFound) as ex:
+            print ex
+            raise
+        except db.api.NoMoreNetworks:
+            print _('No more networks available. If this is a new '
+                    'installation, you need\nto call something like this:\n\n'
+                    '  nova-manage network create pvt 10.0.0.0/8 10 64\n\n')
+        except exception.ProcessExecutionError, e:
+            print e
+            print _("The above error may show that the certificate db has "
+                    "not been created.\nPlease create a database by running "
+                    "a nova-api server on this host.")
+
+AccountCommands = ProjectCommands
+
+
+class FixedIpCommands(object):
+    """Class for managing fixed ip."""
+
+    @args('--host', dest="host", metavar='<host>', help='Host')
+    def list(self, host=None):
+        """Lists all fixed ips (optionally by host)"""
+        ctxt = context.get_admin_context()
+
+        try:
+            if host is None:
+                fixed_ips = db.fixed_ip_get_all(ctxt)
+            else:
+                fixed_ips = db.fixed_ip_get_all_by_instance_host(ctxt, host)
+        except exception.NotFound as ex:
+            print "error: %s" % ex
+            sys.exit(2)
+
+        print "%-18s\t%-15s\t%-17s\t%-15s\t%s" % (_('network'),
+                                                  _('IP address'),
+                                                  _('MAC address'),
+                                                  _('hostname'),
+                                                  _('host'))
+        for fixed_ip in fixed_ips:
+            hostname = None
+            host = None
+            mac_address = None
+            if fixed_ip['instance']:
+                instance = fixed_ip['instance']
+                hostname = instance['hostname']
+                host = instance['host']
+                mac_address = fixed_ip['virtual_interface']['address']
+            print "%-18s\t%-15s\t%-17s\t%-15s\t%s" % (
+                    fixed_ip['network']['cidr'],
+                    fixed_ip['address'],
+                    mac_address, hostname, host)
+
+    @args('--address', dest="address", metavar='<ip address>',
+          help='IP address')
+    def reserve(self, address):
+        """Mark fixed ip as reserved
+        arguments: address"""
+        self._set_reserved(address, True)
+
+    @args('--address', dest="address", metavar='<ip address>',
+          help='IP address')
+    def unreserve(self, address):
+        """Mark fixed ip as free to use
+        arguments: address"""
+        self._set_reserved(address, False)
+
+    def _set_reserved(self, address, reserved):
+        ctxt = context.get_admin_context()
+
+        try:
+            fixed_ip = db.fixed_ip_get_by_address(ctxt, address)
+            if fixed_ip is None:
+                raise exception.NotFound('Could not find address')
+            db.fixed_ip_update(ctxt, fixed_ip['address'],
+                                {'reserved': reserved})
+        except exception.NotFound as ex:
+            print "error: %s" % ex
+            sys.exit(2)
+
+
+class FloatingIpCommands(object):
+    """Class for managing floating ip."""
+
+    @args('--ip_range', dest="range", metavar='<range>', help='IP range')
+    def create(self, range):
+        """Creates floating ips for zone by range"""
+        for address in netaddr.IPNetwork(range):
+            db.floating_ip_create(context.get_admin_context(),
+                                  {'address': str(address)})
+
+    @args('--ip_range', dest="ip_range", metavar='<range>', help='IP range')
+    def delete(self, ip_range):
+        """Deletes floating ips by range"""
+        for address in netaddr.IPNetwork(ip_range):
+            db.floating_ip_destroy(context.get_admin_context(),
+                                   str(address))
+
+    @args('--host', dest="host", metavar='<host>', help='Host')
+    def list(self, host=None):
+        """Lists all floating ips (optionally by host)
+        Note: if host is given, only active floating IPs are returned"""
+        ctxt = context.get_admin_context()
+        if host is None:
+            floating_ips = db.floating_ip_get_all(ctxt)
+        else:
+            floating_ips = db.floating_ip_get_all_by_host(ctxt, host)
+        for floating_ip in floating_ips:
+            instance = None
+            if floating_ip['fixed_ip']:
+                instance = floating_ip['fixed_ip']['instance']['hostname']
+            print "%s\t%s\t%s" % (floating_ip['host'],
+                                  floating_ip['address'],
+                                  instance)
+
+
+class NetworkCommands(object):
+    """Class for managing networks."""
+
+    @args('--label', dest="label", metavar='<label>',
+            help='Label for network (ex: public)')
+    @args('--fixed_range_v4', dest="fixed_range_v4", metavar='<x.x.x.x/yy>',
+            help='IPv4 subnet (ex: 10.0.0.0/8)')
+    @args('--num_networks', dest="num_networks", metavar='<number>',
+            help='Number of networks to create')
+    @args('--network_size', dest="network_size", metavar='<number>',
+            help='Number of IPs per network')
+    @args('--vlan', dest="vlan_start", metavar='<vlan id>', help='vlan id')
+    @args('--vpn', dest="vpn_start", help='vpn start')
+    @args('--fixed_range_v6', dest="fixed_range_v6",
+          help='IPv6 subnet (ex: fe80::/64')
+    @args('--gateway_v6', dest="gateway_v6", help='ipv6 gateway')
+    @args('--bridge', dest="bridge",
+            metavar='<bridge>',
+            help='VIFs on this network are connected to this bridge')
+    @args('--bridge_interface', dest="bridge_interface",
+            metavar='<bridge interface>',
+            help='the bridge is connected to this interface')
+    @args('--multi_host', dest="multi_host", metavar="<'T'|'F'>",
+            help='Multi host')
+    @args('--dns1', dest="dns1", metavar="<DNS Address>", help='First DNS')
+    @args('--dns2', dest="dns2", metavar="<DNS Address>", help='Second DNS')
+    @args('--uuid', dest="uuid", metavar="<network uuid>",
+      help='Network UUID')
+    @args('--project_id', dest="project_id", metavar="<project id>",
+      help='Project id')
+    @args('--priority', dest="priority", metavar="<number>",
+      help='Network interface priority')
+    def create(self, label=None, fixed_range_v4=None, num_networks=None,
+               network_size=None, multi_host=None, vlan_start=None,
+               vpn_start=None, fixed_range_v6=None, gateway_v6=None,
+               bridge=None, bridge_interface=None, dns1=None, dns2=None,
+               project_id=None, priority=None, uuid=None):
+        """Creates fixed ips for host by range"""
+
+        # check for certain required inputs
+        if not label:
+            raise exception.NetworkNotCreated(req='--label')
+        if not (fixed_range_v4 or fixed_range_v6):
+            req = '--fixed_range_v4 or --fixed_range_v6'
+            raise exception.NetworkNotCreated(req=req)
+
+        bridge = bridge or FLAGS.flat_network_bridge
+        if not bridge:
+            bridge_required = ['nova.network.manager.FlatManager',
+                               'nova.network.manager.FlatDHCPManager']
+            if FLAGS.network_manager in bridge_required:
+                raise exception.NetworkNotCreated(req='--bridge')
+
+        bridge_interface = bridge_interface or FLAGS.flat_interface or \
+                           FLAGS.vlan_interface
+        if not bridge_interface:
+            interface_required = ['nova.network.manager.VlanManager']
+            if FLAGS.network_manager in interface_required:
+                raise exception.NetworkNotCreated(req='--bridge_interface')
+
+        # sanitize other input using FLAGS if necessary
+        if not num_networks:
+            num_networks = FLAGS.num_networks
+        if not network_size and fixed_range_v4:
+            fixnet = netaddr.IPNetwork(fixed_range_v4)
+            each_subnet_size = fixnet.size / int(num_networks)
+            if each_subnet_size > FLAGS.network_size:
+                network_size = FLAGS.network_size
+                subnet = 32 - int(math.log(network_size, 2))
+                oversize_msg = _('Subnet(s) too large, defaulting to /%s.'
+                         '  To override, specify network_size flag.') % subnet
+                print oversize_msg
+            else:
+                network_size = fixnet.size
+        if not multi_host:
+            multi_host = FLAGS.multi_host
+        else:
+            multi_host = multi_host == 'T'
+        if not vlan_start:
+            vlan_start = FLAGS.vlan_start
+        if not vpn_start:
+            vpn_start = FLAGS.vpn_start
+        if not dns1 and FLAGS.flat_network_dns:
+            dns1 = FLAGS.flat_network_dns
+
+        if not network_size:
+            network_size = FLAGS.network_size
+
+        # create the network
+        net_manager = utils.import_object(FLAGS.network_manager)
+        net_manager.create_networks(context.get_admin_context(),
+                                    label=label,
+                                    cidr=fixed_range_v4,
+                                    multi_host=multi_host,
+                                    num_networks=int(num_networks),
+                                    network_size=int(network_size),
+                                    vlan_start=int(vlan_start),
+                                    vpn_start=int(vpn_start),
+                                    cidr_v6=fixed_range_v6,
+                                    gateway_v6=gateway_v6,
+                                    bridge=bridge,
+                                    bridge_interface=bridge_interface,
+                                    dns1=dns1,
+                                    dns2=dns2,
+                                    project_id=project_id,
+                                    priority=priority,
+                                    uuid=uuid)
+
+    def list(self):
+        """List all created networks"""
+        _fmt = "%-5s\t%-18s\t%-15s\t%-15s\t%-15s\t%-15s\t%-15s\t%-15s\t%-15s"
+        print _fmt % (_('id'),
+                          _('IPv4'),
+                          _('IPv6'),
+                          _('start address'),
+                          _('DNS1'),
+                          _('DNS2'),
+                          _('VlanID'),
+                          _('project'),
+                          _("uuid"))
+        for network in db.network_get_all(context.get_admin_context()):
+            print _fmt % (network.id,
+                          network.cidr,
+                          network.cidr_v6,
+                          network.dhcp_start,
+                          network.dns1,
+                          network.dns2,
+                          network.vlan,
+                          network.project_id,
+                          network.uuid)
+
+    def quantum_list(self):
+        """List all created networks with Quantum-relevant fields"""
+        _fmt = "%-32s\t%-10s\t%-10s\t%s , %s"
+        print _fmt % (_('uuid'),
+                      _('project'),
+                      _('priority'),
+                      _('cidr_v4'),
+                      _('cidr_v6'))
+        for network in db.network_get_all(context.get_admin_context()):
+            print _fmt % (network.uuid,
+                          network.project_id,
+                          network.priority,
+                          network.cidr,
+                          network.cidr_v6)
+
+    @args('--network', dest="fixed_range", metavar='<x.x.x.x/yy>',
+            help='Network to delete')
+    def delete(self, fixed_range):
+        """Deletes a network"""
+
+        # delete the network
+        net_manager = utils.import_object(FLAGS.network_manager)
+        net_manager.delete_network(context.get_admin_context(), fixed_range)
+
+    @args('--network', dest="fixed_range", metavar='<x.x.x.x/yy>',
+            help='Network to modify')
+    @args('--project', dest="project", metavar='<project name>',
+            help='Project name to associate')
+    @args('--host', dest="host", metavar='<host>',
+            help='Host to associate')
+    @args('--disassociate-project', action="store_true", dest='dis_project',
+          default=False, help='Disassociate Network from Project')
+    @args('--disassociate-host', action="store_true", dest='dis_host',
+          default=False, help='Disassociate Host from Project')
+    def modify(self, fixed_range, project=None, host=None,
+               dis_project=None, dis_host=None):
+        """Associate/Disassociate Network with Project and/or Host
+        arguments: network project host
+        leave any field blank to ignore it
+        """
+        admin_context = context.get_admin_context()
+        network = db.network_get_by_cidr(admin_context, fixed_range)
+        net = {}
+        #User can choose the following actions each for project and host.
+        #1) Associate (set not None value given by project/host parameter)
+        #2) Disassociate (set None by disassociate parameter)
+        #3) Keep unchanged (project/host key is not added to 'net')
+        if project:
+            net['project_id'] = project
+        elif dis_project:
+            net['project_id'] = None
+        if host:
+            net['host'] = host
+        elif dis_host:
+            net['host'] = None
+        db.network_update(admin_context, network['id'], net)
+
+
+class VmCommands(object):
+    """Class for mangaging VM instances."""
+
+    @args('--host', dest="host", metavar='<host>', help='Host')
+    def list(self, host=None):
+        """Show a list of all instances"""
+
+        print "%-10s %-15s %-10s %-10s %-26s %-9s %-9s %-9s" \
+              "  %-10s %-10s %-10s %-5s" % (
+            _('instance'),
+            _('node'),
+            _('type'),
+            _('state'),
+            _('launched'),
+            _('image'),
+            _('kernel'),
+            _('ramdisk'),
+            _('project'),
+            _('user'),
+            _('zone'),
+            _('index'))
+
+        if host is None:
+            instances = db.instance_get_all(context.get_admin_context())
+        else:
+            instances = db.instance_get_all_by_host(
+                           context.get_admin_context(), host)
+
+        for instance in instances:
+            print "%-10s %-15s %-10s %-10s %-26s %-9s %-9s %-9s" \
+                  "  %-10s %-10s %-10s %-5d" % (
+                instance['hostname'],
+                instance['host'],
+                instance['instance_type'].name,
+                instance['vm_state'],
+                instance['launched_at'],
+                instance['image_ref'],
+                instance['kernel_id'],
+                instance['ramdisk_id'],
+                instance['project_id'],
+                instance['user_id'],
+                instance['availability_zone'],
+                instance['launch_index'])
+
+    def _migration(self, ec2_id, dest, block_migration=False):
+        """Migrates a running instance to a new machine.
+         :param ec2_id: instance id which comes from euca-describe-instance.
+         :param dest: destination host name.
+         :param block_migration: if True, do block_migration.
+
+        """
+
+        ctxt = context.get_admin_context()
+        instance_id = ec2utils.ec2_id_to_id(ec2_id)
+
+        if (FLAGS.connection_type != 'libvirt' or
+           (FLAGS.connection_type == 'libvirt' and
+            FLAGS.libvirt_type not in ['kvm', 'qemu'])):
+            msg = _('Only KVM and QEmu are supported for now. Sorry!')
+            raise exception.Error(msg)
+
+        if (FLAGS.volume_driver != 'nova.volume.driver.AOEDriver' and \
+            FLAGS.volume_driver != 'nova.volume.driver.ISCSIDriver'):
+            msg = _("Support only AOEDriver and ISCSIDriver. Sorry!")
+            raise exception.Error(msg)
+
+        rpc.call(ctxt,
+                 FLAGS.scheduler_topic,
+                 {"method": "live_migration",
+                  "args": {"instance_id": instance_id,
+                           "dest": dest,
+                           "topic": FLAGS.compute_topic,
+                           "block_migration": block_migration}})
+
+        print _('Migration of %s initiated.'
+               'Check its progress using euca-describe-instances.') % ec2_id
+
+    @args('--ec2_id', dest='ec2_id', metavar='<ec2 id>', help='EC2 ID')
+    @args('--dest', dest='dest', metavar='<Destanation>',
+            help='destanation node')
+    def live_migration(self, ec2_id, dest):
+        """Migrates a running instance to a new machine."""
+
+        self._migration(ec2_id, dest)
+
+    @args('--ec2_id', dest='ec2_id', metavar='<ec2 id>', help='EC2 ID')
+    @args('--dest', dest='dest', metavar='<Destanation>',
+            help='destanation node')
+    def block_migration(self, ec2_id, dest):
+        """Migrates a running instance to a new machine with storage data."""
+
+        self._migration(ec2_id, dest, True)
+
+
+class ServiceCommands(object):
+    """Enable and disable running services"""
+
+    @args('--host', dest='host', metavar='<host>', help='Host')
+    @args('--service', dest='service', metavar='<service>',
+            help='Nova service')
+    def list(self, host=None, service=None):
+        """
+        Show a list of all running services. Filter by host & service name.
+        """
+        ctxt = context.get_admin_context()
+        now = utils.utcnow()
+        services = db.service_get_all(ctxt)
+        if host:
+            services = [s for s in services if s['host'] == host]
+        if service:
+            services = [s for s in services if s['binary'] == service]
+        print_format = "%-16s %-36s %-16s %-10s %-5s %-10s"
+        print print_format % (
+                    _('Binary'),
+                    _('Host'),
+                    _('Zone'),
+                    _('Status'),
+                    _('State'),
+                    _('Updated_At'))
+        for svc in services:
+            delta = now - (svc['updated_at'] or svc['created_at'])
+            alive = (delta.seconds <= 15)
+            art = (alive and ":-)") or "XXX"
+            active = 'enabled'
+            if svc['disabled']:
+                active = 'disabled'
+            print print_format % (svc['binary'], svc['host'],
+                                  svc['availability_zone'], active, art,
+                                  svc['updated_at'])
+
+    @args('--host', dest='host', metavar='<host>', help='Host')
+    @args('--service', dest='service', metavar='<service>',
+            help='Nova service')
+    def enable(self, host, service):
+        """Enable scheduling for a service"""
+        ctxt = context.get_admin_context()
+        svc = db.service_get_by_args(ctxt, host, service)
+        if not svc:
+            print "Unable to find service"
+            return
+        db.service_update(ctxt, svc['id'], {'disabled': False})
+
+    @args('--host', dest='host', metavar='<host>', help='Host')
+    @args('--service', dest='service', metavar='<service>',
+            help='Nova service')
+    def disable(self, host, service):
+        """Disable scheduling for a service"""
+        ctxt = context.get_admin_context()
+        svc = db.service_get_by_args(ctxt, host, service)
+        if not svc:
+            print "Unable to find service"
+            return
+        db.service_update(ctxt, svc['id'], {'disabled': True})
+
+    @args('--host', dest='host', metavar='<host>', help='Host')
+    def describe_resource(self, host):
+        """Describes cpu/memory/hdd info for host."""
+
+        result = rpc.call(context.get_admin_context(),
+                     FLAGS.scheduler_topic,
+                     {"method": "show_host_resources",
+                      "args": {"host": host}})
+
+        if type(result) != dict:
+            print _('An unexpected error has occurred.')
+            print _('[Result]'), result
+        else:
+            cpu = result['resource']['vcpus']
+            mem = result['resource']['memory_mb']
+            hdd = result['resource']['local_gb']
+            cpu_u = result['resource']['vcpus_used']
+            mem_u = result['resource']['memory_mb_used']
+            hdd_u = result['resource']['local_gb_used']
+
+            cpu_sum = 0
+            mem_sum = 0
+            hdd_sum = 0
+            print 'HOST\t\t\tPROJECT\t\tcpu\tmem(mb)\tdisk(gb)'
+            print '%s(total)\t\t\t%s\t%s\t%s' % (host, cpu, mem, hdd)
+            print '%s(used_now)\t\t\t%s\t%s\t%s' % (host, cpu_u, mem_u, hdd_u)
+            for p_id, val in result['usage'].items():
+                cpu_sum += val['vcpus']
+                mem_sum += val['memory_mb']
+                hdd_sum += val['local_gb']
+            print '%s(used_max)\t\t\t%s\t%s\t%s' % (host, cpu_sum,
+                                                    mem_sum, hdd_sum)
+
+            for p_id, val in result['usage'].items():
+                print '%s\t\t%s\t\t%s\t%s\t%s' % (host,
+                                                  p_id,
+                                                  val['vcpus'],
+                                                  val['memory_mb'],
+                                                  val['local_gb'])
+
+    @args('--host', dest='host', metavar='<host>', help='Host')
+    def update_resource(self, host):
+        """Updates available vcpu/memory/disk info for host."""
+
+        ctxt = context.get_admin_context()
+        service_refs = db.service_get_all_by_host(ctxt, host)
+        if len(service_refs) <= 0:
+            raise exception.Invalid(_('%s does not exist.') % host)
+
+        service_refs = [s for s in service_refs if s['topic'] == 'compute']
+        if len(service_refs) <= 0:
+            raise exception.Invalid(_('%s is not compute node.') % host)
+
+        rpc.call(ctxt,
+                 db.queue_get_for(ctxt, FLAGS.compute_topic, host),
+                 {"method": "update_available_resource"})
+
+
+class HostCommands(object):
+    """List hosts"""
+
+    def list(self, zone=None):
+        """Show a list of all physical hosts. Filter by zone.
+        args: [zone]"""
+        print "%-25s\t%-15s" % (_('host'),
+                                _('zone'))
+        ctxt = context.get_admin_context()
+        now = utils.utcnow()
+        services = db.service_get_all(ctxt)
+        if zone:
+            services = [s for s in services if s['availability_zone'] == zone]
+        hosts = []
+        for srv in services:
+            if not [h for h in hosts if h['host'] == srv['host']]:
+                hosts.append(srv)
+
+        for h in hosts:
+            print "%-25s\t%-15s" % (h['host'], h['availability_zone'])
+
+
+class DbCommands(object):
+    """Class for managing the database."""
+
+    def __init__(self):
+        pass
+
+    @args('--version', dest='version', metavar='<version>',
+            help='Database version')
+    def sync(self, version=None):
+        """Sync the database up to the most recent version."""
+        return migration.db_sync(version)
+
+    def version(self):
+        """Print the current database version."""
+        print migration.db_version()
+
+
+class VersionCommands(object):
+    """Class for exposing the codebase version."""
+
+    def __init__(self):
+        pass
+
+    def list(self):
+        print _("%s (%s)") %\
+                (version.version_string(), version.version_string_with_vcs())
+
+    def __call__(self):
+        self.list()
+
+
+class VsaCommands(object):
+    """Methods for dealing with VSAs"""
+
+    def __init__(self, *args, **kwargs):
+        self.manager = manager.AuthManager()
+        self.vsa_api = vsa.API()
+        self.context = context.get_admin_context()
+
+        self._format_str_vsa = "%(id)-5s %(vsa_id)-15s %(name)-25s "\
+                    "%(type)-10s %(vcs)-6s %(drives)-9s %(stat)-10s "\
+                    "%(az)-10s %(time)-10s"
+        self._format_str_volume = "\t%(id)-4s %(name)-15s %(size)-5s "\
+                    "%(stat)-10s %(att)-20s %(time)s"
+        self._format_str_drive = "\t%(id)-4s %(name)-15s %(size)-5s "\
+                    "%(stat)-10s %(host)-20s %(type)-4s %(tname)-10s %(time)s"
+        self._format_str_instance = "\t%(id)-4s %(name)-10s %(dname)-20s "\
+                    "%(image)-12s %(type)-10s %(fl_ip)-15s %(fx_ip)-15s "\
+                    "%(stat)-10s %(host)-15s %(time)s"
+
+    def _print_vsa_header(self):
+        print self._format_str_vsa %\
+               dict(id=_('ID'),
+                    vsa_id=_('vsa_id'),
+                    name=_('displayName'),
+                    type=_('vc_type'),
+                    vcs=_('vc_cnt'),
+                    drives=_('drive_cnt'),
+                    stat=_('status'),
+                    az=_('AZ'),
+                    time=_('createTime'))
+
+    def _print_vsa(self, vsa):
+        print self._format_str_vsa %\
+                dict(id=vsa['id'],
+                     vsa_id=vsa['name'],
+                     name=vsa['display_name'],
+                     type=vsa['vsa_instance_type'].get('name', None),
+                     vcs=vsa['vc_count'],
+                     drives=vsa['vol_count'],
+                     stat=vsa['status'],
+                     az=vsa['availability_zone'],
+                     time=str(vsa['created_at']))
+
+    def _print_volume_header(self):
+        print _('      === Volumes ===')
+        print self._format_str_volume %\
+                dict(id=_('ID'),
+                     name=_('name'),
+                     size=_('size'),
+                     stat=_('status'),
+                     att=_('attachment'),
+                     time=_('createTime'))
+
+    def _print_volume(self, vol):
+        print self._format_str_volume %\
+                dict(id=vol['id'],
+                     name=vol['display_name'] or vol['name'],
+                     size=vol['size'],
+                     stat=vol['status'],
+                     att=vol['attach_status'],
+                     time=str(vol['created_at']))
+
+    def _print_drive_header(self):
+        print _('      === Drives ===')
+        print self._format_str_drive %\
+                dict(id=_('ID'),
+                    name=_('name'),
+                    size=_('size'),
+                    stat=_('status'),
+                    host=_('host'),
+                    type=_('type'),
+                    tname=_('typeName'),
+                    time=_('createTime'))
+
+    def _print_drive(self, drive):
+        if drive['volume_type_id'] is not None and drive.get('volume_type'):
+            drive_type_name = drive['volume_type'].get('name')
+        else:
+            drive_type_name = ''
+
+        print self._format_str_drive %\
+                dict(id=drive['id'],
+                    name=drive['display_name'],
+                    size=drive['size'],
+                    stat=drive['status'],
+                    host=drive['host'],
+                    type=drive['volume_type_id'],
+                    tname=drive_type_name,
+                    time=str(drive['created_at']))
+
+    def _print_instance_header(self):
+        print _('      === Instances ===')
+        print self._format_str_instance %\
+                dict(id=_('ID'),
+                    name=_('name'),
+                    dname=_('disp_name'),
+                    image=_('image'),
+                    type=_('type'),
+                    fl_ip=_('floating_IP'),
+                    fx_ip=_('fixed_IP'),
+                    stat=_('status'),
+                    host=_('host'),
+                    time=_('createTime'))
+
+    def _print_instance(self, vc):
+
+        fixed_addr = None
+        floating_addr = None
+        if vc['fixed_ips']:
+            fixed = vc['fixed_ips'][0]
+            fixed_addr = fixed['address']
+            if fixed['floating_ips']:
+                floating_addr = fixed['floating_ips'][0]['address']
+        floating_addr = floating_addr or fixed_addr
+
+        print self._format_str_instance %\
+                dict(id=vc['id'],
+                    name=ec2utils.id_to_ec2_id(vc['id']),
+                    dname=vc['display_name'],
+                    image=('ami-%08x' % int(vc['image_ref'])),
+                    type=vc['instance_type']['name'],
+                    fl_ip=floating_addr,
+                    fx_ip=fixed_addr,
+                    stat=vc['vm_state'],
+                    host=vc['host'],
+                    time=str(vc['created_at']))
+
+    def _list(self, context, vsas, print_drives=False,
+                    print_volumes=False, print_instances=False):
+        if vsas:
+            self._print_vsa_header()
+
+        for vsa in vsas:
+            self._print_vsa(vsa)
+            vsa_id = vsa.get('id')
+
+            if print_instances:
+                instances = self.vsa_api.get_all_vsa_instances(context, vsa_id)
+                if instances:
+                    print
+                    self._print_instance_header()
+                    for instance in instances:
+                        self._print_instance(instance)
+                    print
+
+            if print_drives:
+                drives = self.vsa_api.get_all_vsa_drives(context, vsa_id)
+                if drives:
+                    self._print_drive_header()
+                    for drive in drives:
+                        self._print_drive(drive)
+                    print
+
+            if print_volumes:
+                volumes = self.vsa_api.get_all_vsa_volumes(context, vsa_id)
+                if volumes:
+                    self._print_volume_header()
+                    for volume in volumes:
+                        self._print_volume(volume)
+                    print
+
+    @args('--storage', dest='storage',
+        metavar="[{'drive_name': 'type', 'num_drives': N, 'size': M},..]",
+        help='Initial storage allocation for VSA')
+    @args('--name', dest='name', metavar="<name>", help='VSA name')
+    @args('--description', dest='description', metavar="<description>",
+        help='VSA description')
+    @args('--vc', dest='vc_count', metavar="<number>", help='Number of VCs')
+    @args('--instance_type', dest='instance_type_name', metavar="<name>",
+        help='Instance type name')
+    @args('--image', dest='image_name', metavar="<name>", help='Image name')
+    @args('--shared', dest='shared', action="store_true", default=False,
+        help='Use shared drives')
+    @args('--az', dest='az', metavar="<zone:host>", help='Availability zone')
+    @args('--user', dest="user_id", metavar='<User name>',
+            help='User name')
+    @args('--project', dest="project_id", metavar='<Project name>',
+            help='Project name')
+    def create(self, storage='[]', name=None, description=None, vc_count=1,
+                     instance_type_name=None, image_name=None, shared=None,
+                     az=None, user_id=None, project_id=None):
+        """Create a VSA."""
+
+        if project_id is None:
+            try:
+                project_id = os.getenv("EC2_ACCESS_KEY").split(':')[1]
+            except Exception as exc:
+                print _("Failed to retrieve project id: %(exc)s") % exc
+                raise
+
+        if user_id is None:
+            try:
+                project = self.manager.get_project(project_id)
+                user_id = project.project_manager_id
+            except Exception as exc:
+                print _("Failed to retrieve user info: %(exc)s") % exc
+                raise
+
+        is_admin = self.manager.is_admin(user_id)
+        ctxt = context.RequestContext(user_id, project_id, is_admin)
+        if not is_admin and \
+           not self.manager.is_project_member(user_id, project_id):
+            msg = _("%(user_id)s must be an admin or a "
+                    "member of %(project_id)s")
+            LOG.warn(msg % locals())
+            raise ValueError(msg % locals())
+
+        # Sanity check for storage string
+        storage_list = []
+        if storage is not None:
+            try:
+                storage_list = ast.literal_eval(storage)
+            except:
+                print _("Invalid string format %s") % storage
+                raise
+
+            for node in storage_list:
+                if ('drive_name' not in node) or ('num_drives' not in node):
+                    print (_("Invalid string format for element %s. " \
+                            "Expecting keys 'drive_name' & 'num_drives'"),
+                            str(node))
+                    raise KeyError
+
+        if instance_type_name == '':
+            instance_type_name = None
+        instance_type = instance_types.get_instance_type_by_name(
+                                instance_type_name)
+
+        if image_name == '':
+            image_name = None
+
+        if shared in [None, False, "--full_drives"]:
+            shared = False
+        elif shared in [True, "--shared"]:
+            shared = True
+        else:
+            raise ValueError(_('Shared parameter should be set either to "\
+                "--shared or --full_drives'))
+
+        values = {
+            'display_name': name,
+            'display_description': description,
+            'vc_count': int(vc_count),
+            'instance_type': instance_type,
+            'image_name': image_name,
+            'availability_zone': az,
+            'storage': storage_list,
+            'shared': shared,
+            }
+
+        result = self.vsa_api.create(ctxt, **values)
+        self._list(ctxt, [result])
+
+    @args('--id', dest='vsa_id', metavar="<vsa_id>", help='VSA ID')
+    @args('--name', dest='name', metavar="<name>", help='VSA name')
+    @args('--description', dest='description', metavar="<description>",
+        help='VSA description')
+    @args('--vc', dest='vc_count', metavar="<number>", help='Number of VCs')
+    def update(self, vsa_id, name=None, description=None, vc_count=None):
+        """Updates name/description of vsa and number of VCs."""
+
+        values = {}
+        if name is not None:
+            values['display_name'] = name
+        if description is not None:
+            values['display_description'] = description
+        if vc_count is not None:
+            values['vc_count'] = int(vc_count)
+
+        vsa_id = ec2utils.ec2_id_to_id(vsa_id)
+        result = self.vsa_api.update(self.context, vsa_id=vsa_id, **values)
+        self._list(self.context, [result])
+
+    @args('--id', dest='vsa_id', metavar="<vsa_id>", help='VSA ID')
+    def delete(self, vsa_id):
+        """Delete a VSA."""
+        vsa_id = ec2utils.ec2_id_to_id(vsa_id)
+        self.vsa_api.delete(self.context, vsa_id)
+
+    @args('--id', dest='vsa_id', metavar="<vsa_id>",
+        help='VSA ID (optional)')
+    @args('--all', dest='all', action="store_true", default=False,
+        help='Show all available details')
+    @args('--drives', dest='drives', action="store_true",
+        help='Include drive-level details')
+    @args('--volumes', dest='volumes', action="store_true",
+        help='Include volume-level details')
+    @args('--instances', dest='instances', action="store_true",
+        help='Include instance-level details')
+    def list(self, vsa_id=None, all=False,
+             drives=False, volumes=False, instances=False):
+        """Describe all available VSAs (or particular one)."""
+
+        vsas = []
+        if vsa_id is not None:
+            internal_id = ec2utils.ec2_id_to_id(vsa_id)
+            vsa = self.vsa_api.get(self.context, internal_id)
+            vsas.append(vsa)
+        else:
+            vsas = self.vsa_api.get_all(self.context)
+
+        if all:
+            drives = volumes = instances = True
+
+        self._list(self.context, vsas, drives, volumes, instances)
+
+    def update_capabilities(self):
+        """Forces updates capabilities on all nova-volume nodes."""
+
+        rpc.fanout_cast(context.get_admin_context(),
+                 FLAGS.volume_topic,
+                 {"method": "notification",
+                  "args": {"event": "startup"}})
+
+
+class VsaDriveTypeCommands(object):
+    """Methods for dealing with VSA drive types"""
+
+    def __init__(self, *args, **kwargs):
+        super(VsaDriveTypeCommands, self).__init__(*args, **kwargs)
+        self.context = context.get_admin_context()
+        self._drive_type_template = '%s_%sGB_%sRPM'
+
+    def _list(self, drives):
+        format_str = "%-5s %-30s %-10s %-10s %-10s %-20s %-10s %s"
+        if len(drives):
+            print format_str %\
+                   (_('ID'),
+                    _('name'),
+                    _('type'),
+                    _('size_gb'),
+                    _('rpm'),
+                    _('capabilities'),
+                    _('visible'),
+                    _('createTime'))
+
+        for name, vol_type in drives.iteritems():
+            drive = vol_type.get('extra_specs')
+            print format_str %\
+                (str(vol_type['id']),
+                drive['drive_name'],
+                drive['drive_type'],
+                drive['drive_size'],
+                drive['drive_rpm'],
+                drive.get('capabilities', ''),
+                str(drive.get('visible', '')),
+                str(vol_type['created_at']))
+
+    @args('--type', dest='type', metavar="<type>",
+        help='Drive type (SATA, SAS, SSD, etc.)')
+    @args('--size', dest='size_gb', metavar="<gb>", help='Drive size in GB')
+    @args('--rpm', dest='rpm', metavar="<rpm>", help='RPM')
+    @args('--capabilities', dest='capabilities', default=None,
+        metavar="<string>", help='Different capabilities')
+    @args('--hide', dest='hide', action="store_true", default=False,
+        help='Show or hide drive')
+    @args('--name', dest='name', metavar="<name>", help='Drive name')
+    def create(self, type, size_gb, rpm, capabilities=None,
+                     hide=False, name=None):
+        """Create drive type."""
+
+        hide = True if hide in [True, "True", "--hide", "hide"] else False
+
+        if name is None:
+            name = self._drive_type_template % (type, size_gb, rpm)
+
+        extra_specs = {'type': 'vsa_drive',
+                       'drive_name': name,
+                       'drive_type': type,
+                       'drive_size': size_gb,
+                       'drive_rpm': rpm,
+                       'visible': True,
+                       }
+        if hide:
+            extra_specs['visible'] = False
+
+        if capabilities is not None and capabilities != '':
+            extra_specs['capabilities'] = capabilities
+
+        volume_types.create(self.context, name, extra_specs)
+        result = volume_types.get_volume_type_by_name(self.context, name)
+        self._list({name: result})
+
+    @args('--name', dest='name', metavar="<name>", help='Drive name')
+    @args('--purge', action="store_true", dest='purge', default=False,
+            help='purge record from database')
+    def delete(self, name, purge):
+        """Marks instance types / flavors as deleted"""
+        try:
+            if purge:
+                volume_types.purge(self.context, name)
+                verb = "purged"
+            else:
+                volume_types.destroy(self.context, name)
+                verb = "deleted"
+        except exception.ApiError:
+            print "Valid volume type name is required"
+            sys.exit(1)
+        except exception.DBError, e:
+            print "DB Error: %s" % e
+            sys.exit(2)
+        except:
+            sys.exit(3)
+        else:
+            print "%s %s" % (name, verb)
+
+    @args('--all', dest='all', action="store_true", default=False,
+        help='Show all drives (including invisible)')
+    @args('--name', dest='name', metavar="<name>",
+        help='Show only specified drive')
+    def list(self, all=False, name=None):
+        """Describe all available VSA drive types (or particular one)."""
+
+        all = False if all in ["--all", False, "False"] else True
+
+        search_opts = {'extra_specs': {'type': 'vsa_drive'}}
+        if name is not None:
+            search_opts['extra_specs']['name'] = name
+
+        if all == False:
+            search_opts['extra_specs']['visible'] = '1'
+
+        drives = volume_types.get_all_types(self.context,
+                                            search_opts=search_opts)
+        self._list(drives)
+
+    @args('--name', dest='name', metavar="<name>", help='Drive name')
+    @args('--type', dest='type', metavar="<type>",
+        help='Drive type (SATA, SAS, SSD, etc.)')
+    @args('--size', dest='size_gb', metavar="<gb>", help='Drive size in GB')
+    @args('--rpm', dest='rpm', metavar="<rpm>", help='RPM')
+    @args('--capabilities', dest='capabilities', default=None,
+        metavar="<string>", help='Different capabilities')
+    @args('--visible', dest='visible',
+        metavar="<show|hide>", help='Show or hide drive')
+    def update(self, name, type=None, size_gb=None, rpm=None,
+                     capabilities=None, visible=None):
+        """Update drive type."""
+
+        volume_type = volume_types.get_volume_type_by_name(self.context, name)
+
+        extra_specs = {'type': 'vsa_drive'}
+
+        if type:
+            extra_specs['drive_type'] = type
+
+        if size_gb:
+            extra_specs['drive_size'] = size_gb
+
+        if rpm:
+            extra_specs['drive_rpm'] = rpm
+
+        if capabilities:
+            extra_specs['capabilities'] = capabilities
+
+        if visible is not None:
+            if visible in ["show", True, "True"]:
+                extra_specs['visible'] = True
+            elif visible in ["hide", False, "False"]:
+                extra_specs['visible'] = False
+            else:
+                raise ValueError(_('visible parameter should be set to '\
+                                   'show or hide'))
+
+        db.api.volume_type_extra_specs_update_or_create(self.context,
+                    volume_type['id'],
+                    extra_specs)
+        result = volume_types.get_volume_type_by_name(self.context, name)
+        self._list({name: result})
+
+
+class VolumeCommands(object):
+    """Methods for dealing with a cloud in an odd state"""
+
+    @args('--volume', dest='volume_id', metavar='<volume id>',
+            help='Volume ID')
+    def delete(self, volume_id):
+        """Delete a volume, bypassing the check that it
+        must be available."""
+        ctxt = context.get_admin_context()
+        volume = db.volume_get(ctxt, param2id(volume_id))
+        host = volume['host']
+
+        if not host:
+            print "Volume not yet assigned to host."
+            print "Deleting volume from database and skipping rpc."
+            db.volume_destroy(ctxt, param2id(volume_id))
+            return
+
+        if volume['status'] == 'in-use':
+            print "Volume is in-use."
+            print "Detach volume from instance and then try again."
+            return
+
+        rpc.cast(ctxt,
+                 db.queue_get_for(ctxt, FLAGS.volume_topic, host),
+                 {"method": "delete_volume",
+                  "args": {"volume_id": volume['id']}})
+
+    @args('--volume', dest='volume_id', metavar='<volume id>',
+            help='Volume ID')
+    def reattach(self, volume_id):
+        """Re-attach a volume that has previously been attached
+        to an instance.  Typically called after a compute host
+        has been rebooted."""
+        ctxt = context.get_admin_context()
+        volume = db.volume_get(ctxt, param2id(volume_id))
+        if not volume['instance_id']:
+            print "volume is not attached to an instance"
+            return
+        instance = db.instance_get(ctxt, volume['instance_id'])
+        host = instance['host']
+        rpc.cast(ctxt,
+                 db.queue_get_for(ctxt, FLAGS.compute_topic, host),
+                 {"method": "attach_volume",
+                  "args": {"instance_id": instance['id'],
+                           "volume_id": volume['id'],
+                           "mountpoint": volume['mountpoint']}})
+
+
+class InstanceTypeCommands(object):
+    """Class for managing instance types / flavors."""
+
+    def _print_instance_types(self, name, val):
+        deleted = ('', ', inactive')[val["deleted"] == 1]
+        print ("%s: Memory: %sMB, VCPUS: %s, Storage: %sGB, FlavorID: %s, "
+            "Swap: %sMB, RXTX Quota: %sGB, RXTX Cap: %sMB%s") % (
+            name, val["memory_mb"], val["vcpus"], val["local_gb"],
+            val["flavorid"], val["swap"], val["rxtx_quota"],
+            val["rxtx_cap"], deleted)
+
+    @args('--name', dest='name', metavar='<name>',
+            help='Name of instance type/flavor')
+    @args('--memory', dest='memory', metavar='<memory size>',
+            help='Memory size')
+    @args('--cpu', dest='vcpus', metavar='<num cores>', help='Number cpus')
+    @args('--local_gb', dest='local_gb', metavar='<local_gb>',
+            help='local_gb')
+    @args('--flavor', dest='flavorid', metavar='<flavor  id>',
+            help='Flavor ID')
+    @args('--swap', dest='swap', metavar='<swap>', help='Swap')
+    @args('--rxtx_quota', dest='rxtx_quota', metavar='<rxtx_quota>',
+            help='rxtx_quota')
+    @args('--rxtx_cap', dest='rxtx_cap', metavar='<rxtx_cap>',
+            help='rxtx_cap')
+    def create(self, name, memory, vcpus, local_gb, flavorid,
+               swap=0, rxtx_quota=0, rxtx_cap=0):
+        """Creates instance types / flavors"""
+        try:
+            instance_types.create(name, memory, vcpus, local_gb,
+                                  flavorid, swap, rxtx_quota, rxtx_cap)
+        except exception.InvalidInput, e:
+            print "Must supply valid parameters to create instance_type"
+            print e
+            sys.exit(1)
+        except exception.ApiError, e:
+            print "\n\n"
+            print "\n%s" % e
+            print "Please ensure instance_type name and flavorid are unique."
+            print "To complete remove a instance_type, use the --purge flag:"
+            print "\n     # nova-manage instance_type delete <name> --purge\n"
+            print "Currently defined instance_type names and flavorids:"
+            self.list("--all")
+            sys.exit(2)
+        except:
+            print "Unknown error"
+            sys.exit(3)
+        else:
+            print "%s created" % name
+
+    @args('--name', dest='name', metavar='<name>',
+            help='Name of instance type/flavor')
+    @args('--purge', action="store_true", dest='purge', default=False,
+            help='purge record from database')
+    def delete(self, name, purge):
+        """Marks instance types / flavors as deleted"""
+        try:
+            if purge:
+                instance_types.purge(name)
+                verb = "purged"
+            else:
+                instance_types.destroy(name)
+                verb = "deleted"
+        except exception.ApiError:
+            print "Valid instance type name is required"
+            sys.exit(1)
+        except exception.DBError, e:
+            print "DB Error: %s" % e
+            sys.exit(2)
+        except:
+            sys.exit(3)
+        else:
+            print "%s %s" % (name, verb)
+
+    @args('--name', dest='name', metavar='<name>',
+            help='Name of instance type/flavor')
+    def list(self, name=None):
+        """Lists all active or specific instance types / flavors"""
+        try:
+            if name is None:
+                inst_types = instance_types.get_all_types()
+            elif name == "--all":
+                inst_types = instance_types.get_all_types(True)
+            else:
+                inst_types = instance_types.get_instance_type_by_name(name)
+        except exception.DBError, e:
+            _db_error(e)
+        if isinstance(inst_types.values()[0], dict):
+            for k, v in inst_types.iteritems():
+                self._print_instance_types(k, v)
+        else:
+            self._print_instance_types(name, inst_types)
+
+
+class ImageCommands(object):
+    """Methods for dealing with a cloud in an odd state"""
+
+    def __init__(self, *args, **kwargs):
+        self.image_service = image.get_default_image_service()
+
+    def _register(self, container_format, disk_format,
+                  path, owner, name=None, is_public='T',
+                  architecture='x86_64', kernel_id=None, ramdisk_id=None):
+        meta = {'is_public': (is_public == 'T'),
+                'name': name,
+                'container_format': container_format,
+                'disk_format': disk_format,
+                'properties': {'image_state': 'available',
+                               'project_id': owner,
+                               'architecture': architecture,
+                               'image_location': 'local'}}
+        if kernel_id:
+            meta['properties']['kernel_id'] = int(kernel_id)
+        if ramdisk_id:
+            meta['properties']['ramdisk_id'] = int(ramdisk_id)
+        elevated = context.get_admin_context()
+        try:
+            with open(path) as ifile:
+                image = self.image_service.create(elevated, meta, ifile)
+            new = image['id']
+            print _("Image registered to %(new)s (%(new)08x).") % locals()
+            return new
+        except Exception as exc:
+            print _("Failed to register %(path)s: %(exc)s") % locals()
+
+    @args('--image', dest='image', metavar='<image>', help='Image')
+    @args('--kernel', dest='kernel', metavar='<kernel>', help='Kernel')
+    @args('--ram', dest='ramdisk', metavar='<ramdisk>', help='RAM disk')
+    @args('--owner', dest='owner', metavar='<owner>', help='Image owner')
+    @args('--name', dest='name', metavar='<name>', help='Image name')
+    @args('--public', dest='is_public', metavar="<'T'|'F'>",
+            help='Image public or not')
+    @args('--arch', dest='architecture', metavar='<arch>',
+            help='Architecture')
+    def all_register(self, image, kernel, ramdisk, owner, name=None,
+                 is_public='T', architecture='x86_64'):
+        """Uploads an image, kernel, and ramdisk into the image_service"""
+        kernel_id = self.kernel_register(kernel, owner, None,
+                                   is_public, architecture)
+        ramdisk_id = self.ramdisk_register(ramdisk, owner, None,
+                                    is_public, architecture)
+        self.image_register(image, owner, name, is_public,
+                            architecture, 'ami', 'ami',
+                            kernel_id, ramdisk_id)
+
+    @args('--path', dest='path', metavar='<path>', help='Image path')
+    @args('--owner', dest='owner', metavar='<owner>', help='Image owner')
+    @args('--name', dest='name', metavar='<name>', help='Image name')
+    @args('--public', dest='is_public', metavar="<'T'|'F'>",
+            help='Image public or not')
+    @args('--arch', dest='architecture', metavar='<arch>',
+            help='Architecture')
+    @args('--cont_format', dest='container_format',
+            metavar='<container format>',
+            help='Container format(default bare)')
+    @args('--disk_format', dest='disk_format', metavar='<disk format>',
+            help='Disk format(default: raw)')
+    @args('--kernel', dest='kernel_id', metavar='<kernel>', help='Kernel')
+    @args('--ram', dest='ramdisk_id', metavar='<ramdisk>', help='RAM disk')
+    def image_register(self, path, owner, name=None, is_public='T',
+                       architecture='x86_64', container_format='bare',
+                       disk_format='raw', kernel_id=None, ramdisk_id=None):
+        """Uploads an image into the image_service"""
+        return self._register(container_format, disk_format, path,
+                              owner, name, is_public, architecture,
+                              kernel_id, ramdisk_id)
+
+    @args('--path', dest='path', metavar='<path>', help='Image path')
+    @args('--owner', dest='owner', metavar='<owner>', help='Image owner')
+    @args('--name', dest='name', metavar='<name>', help='Image name')
+    @args('--public', dest='is_public', metavar="<'T'|'F'>",
+            help='Image public or not')
+    @args('--arch', dest='architecture', metavar='<arch>',
+            help='Architecture')
+    def kernel_register(self, path, owner, name=None, is_public='T',
+               architecture='x86_64'):
+        """Uploads a kernel into the image_service"""
+        return self._register('aki', 'aki', path, owner, name,
+                              is_public, architecture)
+
+    @args('--path', dest='path', metavar='<path>', help='Image path')
+    @args('--owner', dest='owner', metavar='<owner>', help='Image owner')
+    @args('--name', dest='name', metavar='<name>', help='Image name')
+    @args('--public', dest='is_public', metavar="<'T'|'F'>",
+            help='Image public or not')
+    @args('--arch', dest='architecture', metavar='<arch>',
+            help='Architecture')
+    def ramdisk_register(self, path, owner, name=None, is_public='T',
+                architecture='x86_64'):
+        """Uploads a ramdisk into the image_service"""
+        return self._register('ari', 'ari', path, owner, name,
+                              is_public, architecture)
+
+    def _lookup(self, old_image_id):
+        elevated = context.get_admin_context()
+        try:
+            internal_id = ec2utils.ec2_id_to_id(old_image_id)
+            image = self.image_service.show(elevated, internal_id)
+        except (exception.InvalidEc2Id, exception.ImageNotFound):
+            image = self.image_service.show_by_name(elevated, old_image_id)
+        return image['id']
+
+    def _old_to_new(self, old):
+        mapping = {'machine': 'ami',
+                   'kernel': 'aki',
+                   'ramdisk': 'ari'}
+        container_format = mapping[old['type']]
+        disk_format = container_format
+        if container_format == 'ami' and not old.get('kernelId'):
+            container_format = 'bare'
+            disk_format = 'raw'
+        new = {'disk_format': disk_format,
+               'container_format': container_format,
+               'is_public': old['isPublic'],
+               'name': old['imageId'],
+               'properties': {'image_state': old['imageState'],
+                              'project_id': old['imageOwnerId'],
+                              'architecture': old['architecture'],
+                              'image_location': old['imageLocation']}}
+        if old.get('kernelId'):
+            new['properties']['kernel_id'] = self._lookup(old['kernelId'])
+        if old.get('ramdiskId'):
+            new['properties']['ramdisk_id'] = self._lookup(old['ramdiskId'])
+        return new
+
+    def _convert_images(self, images):
+        elevated = context.get_admin_context()
+        for image_path, image_metadata in images.iteritems():
+            meta = self._old_to_new(image_metadata)
+            old = meta['name']
+            try:
+                with open(image_path) as ifile:
+                    image = self.image_service.create(elevated, meta, ifile)
+                new = image['id']
+                print _("Image %(old)s converted to " \
+                        "%(new)s (%(new)08x).") % locals()
+            except Exception as exc:
+                print _("Failed to convert %(old)s: %(exc)s") % locals()
+
+    @args('--dir', dest='directory', metavar='<path>',
+            help='Images directory')
+    def convert(self, directory):
+        """Uploads old objectstore images in directory to new service"""
+        machine_images = {}
+        other_images = {}
+        directory = os.path.abspath(directory)
+        for fn in glob.glob("%s/*/info.json" % directory):
+            try:
+                image_path = os.path.join(fn.rpartition('/')[0], 'image')
+                with open(fn) as metadata_file:
+                    image_metadata = json.load(metadata_file)
+                if image_metadata['type'] == 'machine':
+                    machine_images[image_path] = image_metadata
+                else:
+                    other_images[image_path] = image_metadata
+            except Exception:
+                print _("Failed to load %(fn)s.") % locals()
+        # NOTE(vish): do kernels and ramdisks first so images
+        self._convert_images(other_images)
+        self._convert_images(machine_images)
+
+
+class AgentBuildCommands(object):
+    """Class for managing agent builds."""
+
+    def create(self, os, architecture, version, url, md5hash,
+                hypervisor='xen'):
+        """Creates a new agent build."""
+        ctxt = context.get_admin_context()
+        agent_build = db.agent_build_create(ctxt,
+                                            {'hypervisor': hypervisor,
+                                             'os': os,
+                                             'architecture': architecture,
+                                             'version': version,
+                                             'url': url,
+                                             'md5hash': md5hash})
+
+    def delete(self, os, architecture, hypervisor='xen'):
+        """Deletes an existing agent build."""
+        ctxt = context.get_admin_context()
+        agent_build_ref = db.agent_build_get_by_triple(ctxt,
+                                  hypervisor, os, architecture)
+        db.agent_build_destroy(ctxt, agent_build_ref['id'])
+
+    def list(self, hypervisor=None):
+        """Lists all agent builds.
+        arguments: <none>"""
+        fmt = "%-10s  %-8s  %12s  %s"
+        ctxt = context.get_admin_context()
+        by_hypervisor = {}
+        for agent_build in db.agent_build_get_all(ctxt):
+            buildlist = by_hypervisor.get(agent_build.hypervisor)
+            if not buildlist:
+                buildlist = by_hypervisor[agent_build.hypervisor] = []
+
+            buildlist.append(agent_build)
+
+        for key, buildlist in by_hypervisor.iteritems():
+            if hypervisor and key != hypervisor:
+                continue
+
+            print "Hypervisor: %s" % key
+            print fmt % ('-' * 10, '-' * 8, '-' * 12, '-' * 32)
+            for agent_build in buildlist:
+                print fmt % (agent_build.os, agent_build.architecture,
+                             agent_build.version, agent_build.md5hash)
+                print '    %s' % agent_build.url
+
+            print
+
+    def modify(self, os, architecture, version, url, md5hash,
+               hypervisor='xen'):
+        """Update an existing agent build."""
+        ctxt = context.get_admin_context()
+        agent_build_ref = db.agent_build_get_by_triple(ctxt,
+                                  hypervisor, os, architecture)
+        db.agent_build_update(ctxt, agent_build_ref['id'],
+                              {'version': version,
+                               'url': url,
+                               'md5hash': md5hash})
+
+
+class ConfigCommands(object):
+    """Class for exposing the flags defined by flag_file(s)."""
+
+    def __init__(self):
+        pass
+
+    def list(self):
+        print FLAGS.FlagsIntoString()
+
+
+CATEGORIES = [
+    ('account', AccountCommands),
+    ('agent', AgentBuildCommands),
+    ('config', ConfigCommands),
+    ('db', DbCommands),
+    ('drive', VsaDriveTypeCommands),
+    ('fixed', FixedIpCommands),
+    ('flavor', InstanceTypeCommands),
+    ('floating', FloatingIpCommands),
+    ('host', HostCommands),
+    ('instance_type', InstanceTypeCommands),
+    ('image', ImageCommands),
+    ('network', NetworkCommands),
+    ('project', ProjectCommands),
+    ('role', RoleCommands),
+    ('service', ServiceCommands),
+    ('shell', ShellCommands),
+    ('user', UserCommands),
+    ('version', VersionCommands),
+    ('vm', VmCommands),
+    ('volume', VolumeCommands),
+    ('vpn', VpnCommands),
+    ('vsa', VsaCommands)]
+
+
+def lazy_match(name, key_value_tuples):
+    """Finds all objects that have a key that case insensitively contains
+    [name] key_value_tuples is a list of tuples of the form (key, value)
+    returns a list of tuples of the form (key, value)"""
+    result = []
+    for (k, v) in key_value_tuples:
+        if k.lower().find(name.lower()) == 0:
+            result.append((k, v))
+    if len(result) == 0:
+        print "%s does not match any options:" % name
+        for k, _v in key_value_tuples:
+            print "\t%s" % k
+        sys.exit(2)
+    if len(result) > 1:
+        print "%s matched multiple options:" % name
+        for k, _v in result:
+            print "\t%s" % k
+        sys.exit(2)
+    return result
+
+
+def methods_of(obj):
+    """Get all callable methods of an object that don't start with underscore
+    returns a list of tuples of the form (method_name, method)"""
+    result = []
+    for i in dir(obj):
+        if callable(getattr(obj, i)) and not i.startswith('_'):
+            result.append((i, getattr(obj, i)))
+    return result
+
+
+def main():
+    """Parse options and call the appropriate class/method."""
+    utils.default_flagfile()
+    argv = FLAGS(sys.argv)
+    logging.setup()
+
+    script_name = argv.pop(0)
+    if len(argv) < 1:
+        print _("\nOpenStack Nova version: %s (%s)\n") %\
+                (version.version_string(), version.version_string_with_vcs())
+        print script_name + " category action [<args>]"
+        print _("Available categories:")
+        for k, _v in CATEGORIES:
+            print "\t%s" % k
+        sys.exit(2)
+    category = argv.pop(0)
+    matches = lazy_match(category, CATEGORIES)
+    # instantiate the command group object
+    category, fn = matches[0]
+    command_object = fn()
+    actions = methods_of(command_object)
+    if len(argv) < 1:
+        if hasattr(command_object, '__call__'):
+            action = ''
+            fn = command_object.__call__
+        else:
+            print script_name + " category action [<args>]"
+            print _("Available actions for %s category:") % category
+            for k, _v in actions:
+                print "\t%s" % k
+            sys.exit(2)
+    else:
+        action = argv.pop(0)
+        matches = lazy_match(action, actions)
+        action, fn = matches[0]
+
+    # For not decorated methods
+    options = getattr(fn, 'options', [])
+
+    usage = "%%prog %s %s <args> [options]" % (category, action)
+    parser = OptionParser(usage=usage)
+    for ar, kw in options:
+        parser.add_option(*ar, **kw)
+    (opts, fn_args) = parser.parse_args(argv)
+    fn_kwargs = vars(opts)
+
+    for k, v in fn_kwargs.items():
+        if v is None:
+            del fn_kwargs[k]
+
+    # call the action with the remaining arguments
+    try:
+        fn(*fn_args, **fn_kwargs)
+        sys.exit(0)
+    except TypeError:
+        print _("Possible wrong number of arguments supplied")
+        print fn.__doc__
+        parser.print_help()
+        raise
+    except Exception:
+        print _("Command failed, please check log for more info")
+        raise
+
+if __name__ == '__main__':
+    main()
