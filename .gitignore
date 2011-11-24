@@ -1,0 +1,5 @@
+*.pyc
+CA
+nova.egg-info
+instances
+networks
