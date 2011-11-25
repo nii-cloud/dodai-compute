@@ -858,6 +858,13 @@ class AgentBuild(BASE, NovaBase):
     url = Column(String(255))
     md5hash = Column(String(255))
 
+class BareMetalMachine(BASE, NovaBase):
+    """Represents a bare metal machine."""
+
+    __tablename__ = 'bare_metal_machines'
+    id = Column(Integer, primary_key=True)
+    name = Column(String(255))
+
 
 def register_models():
     """Register Models and create metadata.
@@ -876,5 +883,18 @@ def register_models():
               AgentBuild, InstanceMetadata, InstanceTypeExtraSpecs, Migration,
               VirtualStorageArray)
     engine = create_engine(FLAGS.sql_connection, echo=False)
+    for model in models:
+        model.metadata.create_all(engine)
+
+def register_models_dodai():
+    """Register Models and create metadata.
+
+    Called from nova.db.sqlalchemy.__init__ as part of loading the driver,
+    it will never need to be called explicitly elsewhere unless the
+    connection is lost and needs to be reestablished.
+    """
+    from sqlalchemy import create_engine_dodai
+    models = (BareMetalMachine)
+    engine = create_engine(FLAGS.sql_connection_dodai, echo=False)
     for model in models:
         model.metadata.create_all(engine)

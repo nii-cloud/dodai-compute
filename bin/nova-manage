@@ -1151,6 +1151,22 @@ class DbCommands(object):
         """Print the current database version."""
         print migration.db_version()
 
+class DodaiDbCommands(object):
+    """Class for managing the database."""
+
+    def __init__(self):
+        pass
+
+    @args('--version', dest='version', metavar='<version>',
+            help='Database version')
+    def sync(self, version=None):
+        """Sync the database up to the most recent version."""
+        return migration.db_sync_dodai(version)
+
+    def version(self):
+        """Print the current database version."""
+        print migration.db_version_dodai()
+
 
 class VersionCommands(object):
     """Class for exposing the codebase version."""
@@ -2023,6 +2039,7 @@ CATEGORIES = [
     ('agent', AgentBuildCommands),
     ('config', ConfigCommands),
     ('db', DbCommands),
+    ('dodai_db', DodaiDbCommands),
     ('drive', VsaDriveTypeCommands),
     ('fixed', FixedIpCommands),
     ('flavor', InstanceTypeCommands),

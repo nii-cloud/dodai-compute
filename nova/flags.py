@@ -354,6 +354,10 @@ DEFINE_string('sqlite_db', 'nova.sqlite', 'file name for sqlite')
 DEFINE_string('sql_connection',
               'sqlite:///$state_path/$sqlite_db',
               'connection string for sql database')
+DEFINE_string('sqlite_db_dodai', 'dodai.sqlite', 'file name for dodai sqlite')
+DEFINE_string('sql_connection_dodai',
+              'sqlite:///$state_path/$sqlite_db_dodai',
+              'connection string for dodai sql database')
 DEFINE_integer('sql_idle_timeout',
               3600,
               'timeout for idle sql database connections')

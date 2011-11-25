@@ -38,3 +38,12 @@ def db_sync(version=None):
 def db_version():
     """Display the current database version."""
     return IMPL.db_version()
+
+def db_sync_dodai(version=None):
+    """Migrate the database to `version` or the most recent version."""
+    return IMPL.db_sync_dodai(version=version)
+
+
+def db_version_dodai():
+    """Display the current database version."""
+    return IMPL.db_version_dodai()

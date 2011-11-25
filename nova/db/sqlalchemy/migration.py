@@ -42,7 +42,6 @@ def db_sync(version=None):
     repo_path = _find_migrate_repo()
     return versioning_api.upgrade(FLAGS.sql_connection, repo_path, version)
 
-
 def db_version():
     repo_path = _find_migrate_repo()
     try:
@@ -83,5 +82,40 @@ def _find_migrate_repo():
     """Get the path for the migrate repository."""
     path = os.path.join(os.path.abspath(os.path.dirname(__file__)),
                         'migrate_repo')
+    assert os.path.exists(path)
+    return path
+
+def db_sync_dodai(version=None):
+    db_version_dodai()
+    repo_path = _find_migrate_repo_dodai()
+    return versioning_api.upgrade(FLAGS.sql_connection_dodai, repo_path, version)
+
+def db_version_dodai():
+    repo_path = _find_migrate_repo_dodai()
+    try:
+        return versioning_api.db_version(FLAGS.sql_connection_dodai, repo_path)
+    except versioning_exceptions.DatabaseNotControlledError:
+        # If we aren't version controlled we may already have the database
+        # in the state from before we started version control, check for that
+        # and set up version_control appropriately
+        meta = sqlalchemy.MetaData()
+        engine = sqlalchemy.create_engine(FLAGS.sql_connection_dodai, echo=False)
+        meta.reflect(bind=engine)
+        try:
+            for table in ("bare_metal_machines"):
+                assert table in meta.tables
+            return db_version_control_dodai(1)
+        except AssertionError:
+            return db_version_control_dodai(0)
+
+def db_version_control_dodai(version=None):
+    repo_path = _find_migrate_repo_dodai()
+    versioning_api.version_control(FLAGS.sql_connection_dodai, repo_path, version)
+    return version
+
+def _find_migrate_repo_dodai():
+    """Get the path for the migrate repository."""
+    path = os.path.join(os.path.abspath(os.path.dirname(__file__)),
+                        'migrate_repo_dodai')
     assert os.path.exists(path)
     return path

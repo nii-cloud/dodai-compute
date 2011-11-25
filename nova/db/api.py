@@ -1571,3 +1571,34 @@ def vsa_get_all(context):
 def vsa_get_all_by_project(context, project_id):
     """Get all Virtual Storage Array records by project ID."""
     return IMPL.vsa_get_all_by_project(context, project_id)
+
+
+####################
+
+
+def bmm_create(context, values):
+    """Creates Bare Metal Machine record."""
+    return IMPL.bmm_create(context, values)
+
+
+def bmm_update(context, bmm_id, values):
+    """Updates Bare Metal Machine record."""
+    return IMPL.bmm_update(context, bmm_id, values)
+
+
+def bmm_destroy(context, bmm_id):
+    """Deletes Bare Metal Machine record."""
+    return IMPL.bmm_destroy(context, bmm_id)
+
+
+def bmm_get(context, bmm_id):
+    """Get Bare Metal Machine record by ID."""
+    return IMPL.bmm_get(context, bmm_id)
+
+def bmm_get_by_name(context, bmm_name):
+    """Get Bare Metal Machine record by name."""
+    return IMPL.bmm_get_by_name(context, bmm_name)
+
+def bmm_get_all(context):
+    """Get all Bare Metal Machine records."""
+    return IMPL.bmm_get_all(context)

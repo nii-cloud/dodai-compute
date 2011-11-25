@@ -27,7 +27,7 @@ from nova import log as logging
 from nova import utils
 from nova.compute import power_state
 from nova.virt import driver
-
+from nova import db
 
 LOG = logging.getLogger('nova.virt.dodai')
 
@@ -129,6 +129,7 @@ class DodaiConnection(driver.ComputeDriver):
         state = power_state.RUNNING
         dodai_instance = DodaiInstance(name, state)
         self.instances[name] = dodai_instance
+        db.bmm_create(context, {"name": name})
 
     def destroy(self, instance, network_info, cleanup=True):
         """Destroy (shutdown and delete) the specified instance.
@@ -147,6 +148,9 @@ class DodaiConnection(driver.ComputeDriver):
         key = instance['name']
         if key in self.instances:
             del self.instances[key]
+            bmm = db.bmm_get_by_name(None, key)
+            LOG.debug(bmm)
+            db.bmm_destroy(None, bmm["id"]) 
         else:
             LOG.warning("Key '%s' not in instances '%s'" %
                         (key, self.instances))
@@ -176,3 +180,4 @@ class DodaiConnection(driver.ComputeDriver):
     def reset_network(self, instance):
         """reset networking for specified instance"""
         LOG.debug("reset_network")
+        return

@@ -31,6 +31,7 @@ from nova import log as logging
 from nova.compute import vm_states
 from nova.db.sqlalchemy import models
 from nova.db.sqlalchemy.session import get_session
+from nova.db.sqlalchemy.session import get_session_dodai
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
@@ -3985,6 +3986,92 @@ def vsa_get_all_by_project(context, project_id):
                    options(joinedload('vsa_instance_type')).\
                    filter_by(project_id=project_id).\
                    filter_by(deleted=can_read_deleted(context)).\
+                   all()
+
+
+    ####################
+
+def bmm_create(context, values):
+    """
+    Creates Bare Metal Machine record.
+    """
+    session = get_session_dodai()
+    try:
+        with session.begin():
+            bmm_ref = models.BareMetalMachine()
+            bmm_ref.update(values)
+            bmm_ref.save(session)
+    except Exception, e:
+        raise exception.DBError(e)
+    return bmm_ref
+
+
+def bmm_update(context, bmm_id, values):
+    """
+    Updates Bare Metal Machine record.
+    """
+    session = get_session_dodai()
+    with session.begin():
+        bmm_ref = bmm_get(context, bmm_id, session=session)
+        bmm_ref.update(values)
+        bmm_ref.save(session=session)
+    return bmm_ref
+
+
+def bmm_destroy(context, bmm_id):
+    """
+    Deletes Bare Metal Machine record.
+    """
+    session = get_session_dodai()
+    with session.begin():
+        session.query(models.BareMetalMachine).\
+                filter_by(id=bmm_id).\
+                update({'deleted': True,
+                        'deleted_at': utils.utcnow(),
+                        'updated_at': literal_column('updated_at')})
+
+
+def bmm_get(context, bmm_id, session=None):
+    """
+    Get Bare Metal Machine record by ID.
+    """
+    if not session:
+        session = get_session_dodai()
+    result = None
+    result = session.query(models.BareMetalMachine).\
+                     filter_by(id=bmm_id).\
+                     filter_by(deleted=False).\
+                     first()
+    if not result:
+        raise exception.BareMetalMachineNotFound(id=bmm_id)
+
+    return result
+
+
+def bmm_get_by_name(context, bmm_name, session=None):
+    """
+    Get Bare Metal Machine record by Name.
+    """
+    if not session:
+        session = get_session_dodai()
+    result = None
+    result = session.query(models.BareMetalMachine).\
+                     filter_by(name=bmm_name).\
+                     filter_by(deleted=False).\
+                     first()
+    if not result:
+        raise exception.BareMetalMachineNotFoundByName(name=bmm_name)
+
+    return result
+
+
+def bmm_get_all(context):
+    """
+    Get all Bare Metal Machine records.
+    """
+    session = get_session()
+    return session.query(models.BareMetalMachine).\
+                   filter_by(deleted=False).\
                    all()
 
 

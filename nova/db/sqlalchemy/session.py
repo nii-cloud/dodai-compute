@@ -30,6 +30,8 @@ FLAGS = nova.flags.FLAGS
 _ENGINE = None
 _MAKER = None
 
+_ENGINE_DODAI = None
+_MAKER_DODAI = None
 
 def get_session(autocommit=True, expire_on_commit=False):
     """Return a SQLAlchemy session."""
@@ -58,6 +60,35 @@ def get_engine():
         engine_args["poolclass"] = sqlalchemy.pool.NullPool
 
     return sqlalchemy.create_engine(FLAGS.sql_connection, **engine_args)
+
+
+def get_session_dodai(autocommit=True, expire_on_commit=False):
+    """Return a SQLAlchemy session."""
+    global _ENGINE_DODAI, _MAKER_DODAI
+
+    if _MAKER_DODAI is None or _ENGINE_DODAI is None:
+        _ENGINE_DODAI = get_engine_dodai()
+        _MAKER_DODAI = get_maker(_ENGINE_DODAI, autocommit, expire_on_commit)
+
+    session = _MAKER_DODAI()
+    session.query = nova.exception.wrap_db_error(session.query)
+    session.flush = nova.exception.wrap_db_error(session.flush)
+    return session
+
+
+def get_engine_dodai():
+    """Return a SQLAlchemy engine."""
+    connection_dict = sqlalchemy.engine.url.make_url(FLAGS.sql_connection_dodai)
+
+    engine_args = {
+        "pool_recycle": FLAGS.sql_idle_timeout,
+        "echo": False,
+    }
+
+    if "sqlite" in connection_dict.drivername:
+        engine_args["poolclass"] = sqlalchemy.pool.NullPool
+
+    return sqlalchemy.create_engine(FLAGS.sql_connection_dodai, **engine_args)
 
 
 def get_maker(engine, autocommit=True, expire_on_commit=False):
