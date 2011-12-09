@@ -21,6 +21,9 @@
 A dodai hypervisor.
 
 """
+import cobbler.api as capi
+import os
+import tempfile
 
 from nova import exception
 from nova import log as logging
@@ -28,9 +31,11 @@ from nova import utils
 from nova.compute import power_state
 from nova.virt import driver
 from nova import db
+from nova.virt import images
+from nova import flags
 
 LOG = logging.getLogger('nova.virt.dodai')
-
+FLAGS = flags.FLAGS
 
 def get_connection(_):
     # The read_only parameter is ignored.
@@ -125,11 +130,60 @@ class DodaiConnection(driver.ComputeDriver):
         :param block_device_info:
         """
         LOG.debug("spawn")
+
+        # fetch image
+        def basepath(fname=''):
+            return os.path.join(FLAGS.instances_path,
+                                instance['name'],
+                                fname)         
+        utils.execute('mkdir', '-p', basepath())
+        image_path = basepath("disk")
+        images.fetch(context, 
+                     instance["image_ref"], 
+                     image_path, 
+                     instance["user_id"], 
+                     instance["project_id"])
+        LOG.debug(image_path)        
+
+        # add image to cobbler
+        self._import_image(image_path)
+
         name = instance.name
         state = power_state.RUNNING
         dodai_instance = DodaiInstance(name, state)
         self.instances[name] = dodai_instance
         db.bmm_create(context, {"name": name})
+
+    def _import_image(self, file_path):
+        device = self._link_device(file_path)
+
+        tmpdir = tempfile.mkdtemp()
+        try:
+            # mount loopback to dir
+            out, err = utils.execute('mount', device, tmpdir,
+                                     run_as_root=True)
+            if err:
+                raise exception.Error(_('Failed to mount filesystem: %s')
+                                      % err)
+
+            cobbler = capi.BootAPI()
+            cobbler.import_tree(tmpdir, 
+                                "ubuntu-mini", 
+                                breed="ubuntu", 
+                                logger=logging.getLogger('cobbler'))
+
+        finally:
+            utils.execute('umount', device, run_as_root=True)             
+            utils.execute('rmdir', tmpdir)
+        
+
+    def _link_device(self, file_path):
+        out, err = utils.execute('losetup', '--find', '--show', file_path,
+                                 run_as_root=True)
+        if err:
+            raise exception.Error(_('Could not attach image to loopback: %s')
+                                  % err)
+        return out.strip()
 
     def destroy(self, instance, network_info, cleanup=True):
         """Destroy (shutdown and delete) the specified instance.

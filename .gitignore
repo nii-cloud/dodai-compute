@@ -3,3 +3,4 @@ CA
 nova.egg-info
 instances
 networks
+*.sqlite
