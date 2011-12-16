@@ -1,0 +1,48 @@
+#!/bin/bash
+function partition_and_format {
+  parted /dev/sda rm 1 > /dev/null 2>&1
+  parted /dev/sda rm 2 > /dev/null 2>&1
+  parted /dev/sda rm 3 > /dev/null 2>&1
+  parted /dev/sda rm 4 > /dev/null 2>&1
+
+  parted /dev/sda mkpart primary 1 10240
+  parted /dev/sda mkpartfs primary linux-swap 10241 12288
+  parted /dev/sda mkpart primary 12289 20480
+  parted /dev/sda set 1 boot on
+
+  mkfs.ext3 /dev/sda1 -q
+  mkfs.ext3 /dev/sda3 -q
+  parted /dev/sda print
+}
+
+function copy_fs {
+  mkdir /mnt/sda3
+  mount /dev/sda3 /mnt/sda3
+
+  wget -O /mnt/sda3/image http://$cobbler/cobbler/images/$instance_id/disk
+  mkdir /mnt/image
+  mount -o loop /mnt/sda3/image /mnt/image
+
+  mkdir /mnt/sda1
+  mount /dev/sda1 /mnt/sda1
+
+  rsync -PavHS /mnt/image/ /mnt/sda1
+}
+
+function set_hostname {
+  sed -i -e "s/HOSTNAME.*/HOSTNAME=$instance_id/g" /etc/sysconfig/network
+}
+
+function grub_install {
+  chroot /mnt/sda1 grub-install /dev/sda
+}
+
+cobbler=COBBLER
+instance_id=INSTANCE_ID
+
+service network start
+partition_and_format
+copy_fs
+set_hostname
+grub_install
+#reboot

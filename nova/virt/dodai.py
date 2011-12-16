@@ -24,7 +24,7 @@ A dodai hypervisor.
 import cobbler.api as capi
 import os
 import tempfile
-import json
+import time
 
 from nova import exception
 from nova import log as logging
@@ -132,10 +132,16 @@ class DodaiConnection(driver.ComputeDriver):
         """
         LOG.debug("spawn")
 
+        mac = "00:16:D3:DC:38:9A".lower()
+        cobbler = "192.168.0.15" 
+
+        cobbler_base_path = "/var/www/cobbler"
+
         # fetch image
         def basepath(fname=''):
-            return os.path.join(FLAGS.instances_path,
-                                instance['name'],
+            return os.path.join(cobbler_base_path,
+                                "images",
+                                instance["name"],
                                 fname)         
 
         utils.execute('mkdir', '-p', basepath())
@@ -145,17 +151,41 @@ class DodaiConnection(driver.ComputeDriver):
                      image_path, 
                      instance["user_id"], 
                      instance["project_id"])
-        LOG.debug(image_path)        
-        LOG.debug(json.dumps(instance))
 
-        # add image to cobbler
-        #self._import_image(image_path)
+        LOG.debug(image_path) 
+
+        pxeboot_config_file = os.path.join("/var/lib/tftpboot/pxelinux.cfg", 
+                                           "01-" + mac.replace(":", "-"))
+        self._cp_template("dodai_init.sh", 
+                          basepath("dodai_init.sh"),
+                          {"INSTANCE_ID": instance["name"], "COBBLER": cobbler})
+        self._cp_template("dodai_create", 
+                          pxeboot_config_file, 
+                          {"INSTANCE_ID": instance["name"], "COBBLER": cobbler})
+        self._power_on(mac)
+        time.sleep(30)
+        self._cp_template("dodai_start", pxeboot_config_file, {})
 
         name = instance.name
         state = power_state.RUNNING
         dodai_instance = DodaiInstance(name, state)
         self.instances[name] = dodai_instance
         db.bmm_create(context, {"name": name})
+
+    def _power_on(self, mac):
+        utils.execute("etherwake", mac)
+
+    def _cp_template(self, template_name, dest_path, params):
+        f = open(utils.abspath("virt/" + template_name + ".template"), "r")
+        content = f.read()
+        f.close()
+
+        for key, value in params.iteritems():
+            content = content.replace(key, value)
+
+        f = open(dest_path, "w")
+        f.write(content) 
+        f.close 
 
     def _import_image(self, file_path):
         device = self._link_device(file_path)
