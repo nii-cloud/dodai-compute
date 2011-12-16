@@ -24,6 +24,7 @@ A dodai hypervisor.
 import cobbler.api as capi
 import os
 import tempfile
+import json
 
 from nova import exception
 from nova import log as logging
@@ -136,6 +137,7 @@ class DodaiConnection(driver.ComputeDriver):
             return os.path.join(FLAGS.instances_path,
                                 instance['name'],
                                 fname)         
+
         utils.execute('mkdir', '-p', basepath())
         image_path = basepath("disk")
         images.fetch(context, 
@@ -144,9 +146,10 @@ class DodaiConnection(driver.ComputeDriver):
                      instance["user_id"], 
                      instance["project_id"])
         LOG.debug(image_path)        
+        LOG.debug(json.dumps(instance))
 
         # add image to cobbler
-        self._import_image(image_path)
+        #self._import_image(image_path)
 
         name = instance.name
         state = power_state.RUNNING
