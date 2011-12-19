@@ -30,6 +30,7 @@ from nova import exception
 from nova import log as logging
 from nova import utils
 from nova.compute import power_state
+from nova.compute import instance_types
 from nova.virt import driver
 from nova import db
 from nova.virt import images
@@ -37,6 +38,11 @@ from nova import flags
 
 LOG = logging.getLogger('nova.virt.dodai')
 FLAGS = flags.FLAGS
+
+flags.DEFINE_string('cobbler', None, 'IP address of cobbler')
+flags.DEFINE_string('cobbler_path', '/var/www/cobbler', 'Path of cobbler')
+flags.DEFINE_string('pxe_boot_path', '/var/lib/tftpboot/pxelinux.cfg', 'Path of pxeboot folder')
+mac = "01-00-16-d3-dc-38-9a" 
 
 def get_connection(_):
     # The read_only parameter is ignored.
@@ -132,20 +138,9 @@ class DodaiConnection(driver.ComputeDriver):
         """
         LOG.debug("spawn")
 
-        mac = "00:16:D3:DC:38:9A".lower()
-        cobbler = "192.168.0.15" 
-
-        cobbler_base_path = "/var/www/cobbler"
-
         # fetch image
-        def basepath(fname=''):
-            return os.path.join(cobbler_base_path,
-                                "images",
-                                instance["name"],
-                                fname)         
-
-        utils.execute('mkdir', '-p', basepath())
-        image_path = basepath("disk")
+        utils.execute('mkdir', '-p', self._get_cobbler_path(instance))
+        image_path = self._get_cobbler_path(instance, "disk")
         images.fetch(context, 
                      instance["image_ref"], 
                      image_path, 
@@ -154,17 +149,20 @@ class DodaiConnection(driver.ComputeDriver):
 
         LOG.debug(image_path) 
 
-        pxeboot_config_file = os.path.join("/var/lib/tftpboot/pxelinux.cfg", 
-                                           "01-" + mac.replace(":", "-"))
-        self._cp_template("dodai_init.sh", 
-                          basepath("dodai_init.sh"),
-                          {"INSTANCE_ID": instance["name"], "COBBLER": cobbler})
+        self._cp_template("dodai_create.sh", 
+                          self._get_cobbler_path(instance, "dodai_create.sh"),
+                          {"INSTANCE_ID": instance["name"], 
+                           "COBBLER": FLAGS.cobbler, 
+                           "DISK_SIZE": self._get_disk_size_mb(instance)})
         self._cp_template("dodai_create", 
-                          pxeboot_config_file, 
-                          {"INSTANCE_ID": instance["name"], "COBBLER": cobbler})
-        self._power_on(mac)
-        time.sleep(30)
-        self._cp_template("dodai_start", pxeboot_config_file, {})
+                          self._get_pxe_boot_file(), 
+                          {"INSTANCE_ID": instance["name"], "COBBLER": FLAGS.cobbler})
+
+        LOG.debug("reboot.")
+        self._reboot()
+
+        LOG.debug("start dodai")
+        self._cp_template("dodai_start", self._get_pxe_boot_file(), {})
 
         name = instance.name
         state = power_state.RUNNING
@@ -172,8 +170,25 @@ class DodaiConnection(driver.ComputeDriver):
         self.instances[name] = dodai_instance
         db.bmm_create(context, {"name": name})
 
-    def _power_on(self, mac):
-        utils.execute("etherwake", mac)
+    def _get_cobbler_path(self, instance, file_name = ""):
+        return os.path.join(FLAGS.cobbler_path,
+                     "images",
+                     instance["name"],
+                     file_name)
+
+    def _get_pxe_boot_file(self):
+        return os.path.join(FLAGS.pxe_boot_path, mac)
+
+    def _get_disk_size_mb(self, instance):
+        inst_type_id = instance['instance_type_id']
+        inst_type = instance_types.get_instance_type(inst_type_id)
+        if inst_type["local_gb"] == 0:
+          return 10 * 1024
+
+        return inst_type["local_gb"] * 1024
+
+    def _reboot(self):
+        time.sleep(120)
 
     def _cp_template(self, template_name, dest_path, params):
         f = open(utils.abspath("virt/" + template_name + ".template"), "r")
@@ -181,42 +196,12 @@ class DodaiConnection(driver.ComputeDriver):
         f.close()
 
         for key, value in params.iteritems():
-            content = content.replace(key, value)
+            content = content.replace(key, str(value))
 
         f = open(dest_path, "w")
         f.write(content) 
         f.close 
 
-    def _import_image(self, file_path):
-        device = self._link_device(file_path)
-
-        tmpdir = tempfile.mkdtemp()
-        try:
-            # mount loopback to dir
-            out, err = utils.execute('mount', device, tmpdir,
-                                     run_as_root=True)
-            if err:
-                raise exception.Error(_('Failed to mount filesystem: %s')
-                                      % err)
-
-            cobbler = capi.BootAPI()
-            cobbler.import_tree(tmpdir, 
-                                "ubuntu-mini", 
-                                breed="ubuntu", 
-                                logger=logging.getLogger('cobbler'))
-
-        finally:
-            utils.execute('umount', device, run_as_root=True)             
-            utils.execute('rmdir', tmpdir)
-        
-
-    def _link_device(self, file_path):
-        out, err = utils.execute('losetup', '--find', '--show', file_path,
-                                 run_as_root=True)
-        if err:
-            raise exception.Error(_('Could not attach image to loopback: %s')
-                                  % err)
-        return out.strip()
 
     def destroy(self, instance, network_info, cleanup=True):
         """Destroy (shutdown and delete) the specified instance.
@@ -232,6 +217,17 @@ class DodaiConnection(driver.ComputeDriver):
 
         """
         LOG.debug("destroy")
+
+        self._cp_template("dodai_delete.sh",
+                          self._get_cobbler_path(instance, "dodai_delete.sh"), 
+                          {})
+        self._cp_template("dodai_delete",
+                          self._get_pxe_boot_file(),
+                          {"INSTANCE_ID": instance["name"], "COBBLER": FLAGS.cobbler})
+
+        self._reboot()
+        utils.execute("rm", "-rf", self._get_cobbler_path(instance));
+
         key = instance['name']
         if key in self.instances:
             del self.instances[key]

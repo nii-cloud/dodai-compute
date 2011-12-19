@@ -1,0 +1,64 @@
+#!/bin/bash
+function partition_and_format {
+  parted /dev/sda unit GB
+  parted -s /dev/sda mklabel msdos 
+
+  parted /dev/sda rm 1 > /dev/null 2>&1
+  parted /dev/sda rm 2 > /dev/null 2>&1
+  parted /dev/sda rm 3 > /dev/null 2>&1
+  parted /dev/sda rm 4 > /dev/null 2>&1
+
+  total_size_gb=`parted /dev/sda print | grep Disk | cut -f3 -d " " | cut -f1 -d "G"`
+
+  sda1_end=$disk_size
+  sda2_start=`expr $sda1_end + 1`
+  sda2_end=`expr $sda2_start + 2048`
+  sda3_start=`expr $sda2_end + 1`
+  sda3_end=`expr $sda3_end + $total_size_gb \* 1024 - $sda2_end`
+
+  parted /dev/sda mkpart primary 1 $sda1_end 
+  parted /dev/sda mkpartfs primary linux-swap $sda2_start $sda2_end
+  parted /dev/sda mkpart primary $sda3_start $sda3_end
+  parted /dev/sda set 1 boot on
+
+  mkfs.ext4 /dev/sda1 -q
+  mkfs.ext4 /dev/sda3 -q
+  parted /dev/sda print
+}
+
+function copy_fs {
+  mkdir /mnt/sda3
+  mount /dev/sda3 /mnt/sda3
+
+  wget -O /mnt/sda3/image http://$cobbler/cobbler/images/$instance_id/disk
+  mkdir /mnt/image
+  mount -o loop -t ext4 /mnt/sda3/image /mnt/image
+
+  mkdir /mnt/sda1
+  mount /dev/sda1 /mnt/sda1
+
+  rsync -PavHS /mnt/image/ /mnt/sda1
+}
+
+function set_hostname {
+  echo "$instance_id" > /mnt/sda1/etc/hostname
+}
+
+function grub_install {
+  mount -o bind /dev/ /mnt/sda1/dev
+  mount -t proc none /mnt/sda1/proc
+  chroot /mnt/sda1 grub-install /dev/sda
+}
+
+cobbler=COBBLER
+instance_id=INSTANCE_ID
+disk_size=DISK_SIZE
+
+partition_and_format
+copy_fs
+set_hostname
+grub_install
+
+echo "Initialization finished."
+
+#reboot
