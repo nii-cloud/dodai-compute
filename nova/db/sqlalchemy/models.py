@@ -864,6 +864,17 @@ class BareMetalMachine(BASE, NovaBase):
     __tablename__ = 'bare_metal_machines'
     id = Column(Integer, primary_key=True)
     name = Column(String(255))
+    instance_id = Column(Integer)
+    instance_type = Column(String(255))
+    vcpus = Column(Integer)
+    memory_mb = Column(Integer)
+    local_gb = Column(Integer)
+    availability_zone = Column(String(255))
+    ipmi_ip = Column(String(255))
+    ipmi_mac = Column(String(255))
+    pxe_mac = Column(String(255))
+    ofs_port = Column(String(255))
+    status = Column(String(255))
 
 
 def register_models():

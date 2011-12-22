@@ -31,6 +31,17 @@ bare_metal_machines = Table('bare_metal_machines', meta,
         Column('name',
                String(length=255, convert_unicode=False, assert_unicode=None,
                       unicode_error=None, _warn_on_bytestring=False)),
+        Column('instance_id', Integer()),
+        Column('instance_type', String(length=255)),
+        Column('vcpus', Integer()),
+        Column('memory_mb', Integer()),
+        Column('local_gb', Integer()),
+        Column('availability_zone', String(length=255)),
+        Column('ipmi_ip', String(length=255)),
+        Column('ipmi_mac', String(length=255)),
+        Column('pxe_mac', String(length=255)),
+        Column('ofs_port', String(length=255)),
+        Column('status', String(length=255)),
         )
 
 

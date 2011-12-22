@@ -42,7 +42,6 @@ FLAGS = flags.FLAGS
 flags.DEFINE_string('cobbler', None, 'IP address of cobbler')
 flags.DEFINE_string('cobbler_path', '/var/www/cobbler', 'Path of cobbler')
 flags.DEFINE_string('pxe_boot_path', '/var/lib/tftpboot/pxelinux.cfg', 'Path of pxeboot folder')
-mac = "01-00-16-d3-dc-38-9a" 
 
 def get_connection(_):
     # The read_only parameter is ignored.
@@ -138,6 +137,10 @@ class DodaiConnection(driver.ComputeDriver):
         """
         LOG.debug("spawn")
 
+        # find a bare metal machine
+        bmm = self._find_a_bare_metal_machine(instance)
+        mac = bmm["pxe_mac"]
+
         # fetch image
         utils.execute('mkdir', '-p', self._get_cobbler_path(instance))
         image_path = self._get_cobbler_path(instance, "disk")
@@ -158,17 +161,21 @@ class DodaiConnection(driver.ComputeDriver):
                           self._get_pxe_boot_file(), 
                           {"INSTANCE_ID": instance["name"], "COBBLER": FLAGS.cobbler})
 
-        LOG.debug("reboot.")
-        self._reboot()
+        LOG.debug("reboot or power on.")
+        self._reboot_or_power_on(bmm["ipmi_ip"])
 
         LOG.debug("start dodai")
         self._cp_template("dodai_start", self._get_pxe_boot_file(), {})
 
-        name = instance.name
-        state = power_state.RUNNING
-        dodai_instance = DodaiInstance(name, state)
-        self.instances[name] = dodai_instance
-        db.bmm_create(context, {"name": name})
+        self._add_to_ofc()
+
+        db.bmm_update(context, bmm["id"], {"instance_id": instance["id"],
+                                           "availability_zone": instance["availability_zone"] }) 
+
+    def _find_a_bare_metal_machine(self, instance):
+        inst_type_id = instance['instance_type_id']
+        inst_type = instance_types.get_instance_type(inst_type_id)
+        return db.bmm_get_by_instance_type(inst_type)
 
     def _get_cobbler_path(self, instance, file_name = ""):
         return os.path.join(FLAGS.cobbler_path,
@@ -187,8 +194,17 @@ class DodaiConnection(driver.ComputeDriver):
 
         return inst_type["local_gb"] * 1024
 
-    def _reboot(self):
+    def _reboot_or_power_on(self, ip):
+        # TODO: to implement with ipmi
         time.sleep(120)
+
+    def _add_to_ofc(self):
+        # TODO: to implement
+        pass
+
+    def _add_to_ofc(self):
+        # TODO: to implement
+        pass
 
     def _cp_template(self, template_name, dest_path, params):
         f = open(utils.abspath("virt/" + template_name + ".template"), "r")
@@ -225,18 +241,13 @@ class DodaiConnection(driver.ComputeDriver):
                           self._get_pxe_boot_file(),
                           {"INSTANCE_ID": instance["name"], "COBBLER": FLAGS.cobbler})
 
-        self._reboot()
+        self._reboot_or_power_on()
         utils.execute("rm", "-rf", self._get_cobbler_path(instance));
 
-        key = instance['name']
-        if key in self.instances:
-            del self.instances[key]
-            bmm = db.bmm_get_by_name(None, key)
-            LOG.debug(bmm)
-            db.bmm_destroy(None, bmm["id"]) 
-        else:
-            LOG.warning("Key '%s' not in instances '%s'" %
-                        (key, self.instances))
+        bmm = db.bmm_find_by_instance_id(None, instance["id"])
+        db.bmm_update(None, bmm["id"], { "instance_id": None, "availability_zone": None })
+
+        self._remove_from_ofc()
 
     def reboot(self, instance, network_info):
         """Reboot the specified instance.
@@ -264,3 +275,36 @@ class DodaiConnection(driver.ComputeDriver):
         """reset networking for specified instance"""
         LOG.debug("reset_network")
         return
+
+
+class PowerManager(object):
+
+    def __init__(self, instance_id, ip):
+        self.cobbler = capi.BootAPI()
+
+        system = self.cobbler.new_system()
+        system.set_name(instance_id)
+        system.set_power_type("ipmi")
+        system.set_power_user(FLAGS.ipmi_user)
+        system.set_power_pass(FLAGS.ipmi_password)
+        system.set_power_address(ip)
+        self.cobbler.add_system(system)
+        self.system = system
+
+    def on(self):
+        return self.cobbler.power_on(self.system)
+
+    def off(self):
+        return self.cobbler.power_off(self.system)
+
+    def reboot(self):
+        return self.cobbler.reboot(self.system)
+
+    def status(self):
+        return self.cobbler.power_status(self.system)
+
+class OpenFlowClient(object):
+
+    def _init_(self)
+        pass
+

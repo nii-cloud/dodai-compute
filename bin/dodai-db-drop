@@ -1,0 +1,3 @@
+#!/bin/bash
+
+mysql -uroot -pnova -e 'DROP DATABASE dodai;'

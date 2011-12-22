@@ -841,3 +841,9 @@ class BareMetalMachineNotFound(NotFound):
 
 class BareMetalMachineNotFoundByName(NotFound):
     message = _("Bare Metal Machine %(name)s could not be found.")
+
+class BareMetalMachineNotFoundByInstanceType(NotFound):
+    message = _("Bare Metal Machine %(instance_type)s could not be found.")
+
+class BareMetalMachineNotFoundByInstanceId(NotFound):
+    message = _("Bare Metal Machine %(instance_id)s could not be found.")

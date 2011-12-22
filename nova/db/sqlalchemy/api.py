@@ -4075,4 +4075,38 @@ def bmm_get_all(context):
                    all()
 
 
+def bmm_get_by_instance_type(context, instance_type, session=None):
+    """
+    Get Bare Metal Machine record by instance type.
+    """
+    if not session:
+        session = get_session_dodai()
+    result = None
+    result = session.query(models.BareMetalMachine).\
+                     filter_by(instance_type=instance_type).\
+                     filter_by(status="active").\
+                     filter_by(deleted=False).\
+                     first()
+
+    if not result:
+        raise exception.BareMetalMachineNotFoundByInstanceType(instance_type=instance_type)
+
+    return result
+
+def bmm_get_by_instance_id(context, instance_id, session=None):
+    """
+    Get Bare Metal Machine record by instance id.
+    """
+    if not session:
+        session = get_session_dodai()
+    result = None
+    result = session.query(models.BareMetalMachine).\
+                     filter_by(instance_id=instance_id).\
+                     first()
+
+
+    if not result:
+        raise exception.BareMetalMachineNotFoundByInstanceId(instance_id=instance_id)
+
+    return result
     ####################

@@ -61,4 +61,4 @@ grub_install
 
 echo "Initialization finished."
 
-#reboot
+reboot
