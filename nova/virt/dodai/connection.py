@@ -152,12 +152,12 @@ class DodaiConnection(driver.ComputeDriver):
 
         LOG.debug(image_path) 
 
-        self._cp_template("dodai_create.sh", 
-                          self._get_cobbler_path(instance, "dodai_create.sh"),
+        self._cp_template("create.sh", 
+                          self._get_cobbler_path(instance, "create.sh"),
                           {"INSTANCE_ID": instance["name"], 
                            "COBBLER": FLAGS.cobbler, 
                            "DISK_SIZE": self._get_disk_size_mb(instance)})
-        self._cp_template("dodai_create", 
+        self._cp_template("pxeboot_create", 
                           self._get_pxe_boot_file(), 
                           {"INSTANCE_ID": instance["name"], "COBBLER": FLAGS.cobbler})
 
@@ -165,7 +165,7 @@ class DodaiConnection(driver.ComputeDriver):
         self._reboot_or_power_on(bmm["ipmi_ip"])
 
         LOG.debug("start dodai")
-        self._cp_template("dodai_start", self._get_pxe_boot_file(), {})
+        self._cp_template("pxeboot_start", self._get_pxe_boot_file(), {})
 
         self._add_to_ofc()
 
@@ -207,7 +207,7 @@ class DodaiConnection(driver.ComputeDriver):
         pass
 
     def _cp_template(self, template_name, dest_path, params):
-        f = open(utils.abspath("virt/" + template_name + ".template"), "r")
+        f = open(utils.abspath("virt/dodai/" + template_name + ".template"), "r")
         content = f.read()
         f.close()
 
@@ -234,10 +234,10 @@ class DodaiConnection(driver.ComputeDriver):
         """
         LOG.debug("destroy")
 
-        self._cp_template("dodai_delete.sh",
-                          self._get_cobbler_path(instance, "dodai_delete.sh"), 
+        self._cp_template("delete.sh",
+                          self._get_cobbler_path(instance, "delete.sh"), 
                           {})
-        self._cp_template("dodai_delete",
+        self._cp_template("pxeboot_delete",
                           self._get_pxe_boot_file(),
                           {"INSTANCE_ID": instance["name"], "COBBLER": FLAGS.cobbler})
 
@@ -305,6 +305,6 @@ class PowerManager(object):
 
 class OpenFlowClient(object):
 
-    def _init_(self)
+    def __init__(self):
         pass
 

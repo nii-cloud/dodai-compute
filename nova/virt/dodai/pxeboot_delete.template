@@ -1,0 +1,6 @@
+DEFAULT pxeboot
+TIMEOUT 20
+PROMPT 0
+LABEL pxeboot
+        KERNEL /os-duper/vmlinuz0
+        APPEND initrd=/os-duper/initrd0.img root=/os-duper.iso rootfstype=iso9660 rootflags=loop dodai_script=http://COBBLER/cobbler/images/INSTANCE_ID/delete.sh

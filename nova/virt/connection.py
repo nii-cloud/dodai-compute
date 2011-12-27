@@ -29,7 +29,7 @@ from nova.virt import fake
 from nova.virt import hyperv
 from nova.virt import vmwareapi_conn
 from nova.virt import xenapi_conn
-from nova.virt import dodai 
+from nova.virt.dodai import connection as dodai_conn
 from nova.virt.libvirt import connection as libvirt_conn
 
 
@@ -73,7 +73,7 @@ def get_connection(read_only=False):
     elif t == 'vmwareapi':
         conn = vmwareapi_conn.get_connection(read_only)
     elif t == 'dodai':
-        conn = dodai.get_connection(read_only)
+        conn = dodai_conn.get_connection(read_only)
     else:
         raise Exception('Unknown connection type "%s"' % t)
 
