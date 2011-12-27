@@ -42,6 +42,9 @@ FLAGS = flags.FLAGS
 flags.DEFINE_string('cobbler', None, 'IP address of cobbler')
 flags.DEFINE_string('cobbler_path', '/var/www/cobbler', 'Path of cobbler')
 flags.DEFINE_string('pxe_boot_path', '/var/lib/tftpboot/pxelinux.cfg', 'Path of pxeboot folder')
+flags.DEFINE_string('ofc_service_url', None, 'URL of open flow controller service.')
+flags.DEFINE_string('ofc_dpid', None, 'Dpid of open flow controller.')
+flags.DEFINE_string('ofc_port_no', None, 'Port number of open flow controller.')
 
 def get_connection(_):
     # The read_only parameter is ignored.
@@ -167,10 +170,25 @@ class DodaiConnection(driver.ComputeDriver):
         LOG.debug("start dodai")
         self._cp_template("pxeboot_start", self._get_pxe_boot_file(), {})
 
-        self._add_to_ofc()
+        parts = instance["availability_zone"].split(":")
+        create_cluster = False
+        if len(parts) == 3:
+            parts.pop(0)
+            create_cluster = True
+
+        cluster_name, vlan_id = parts
+        vlan_id = int(vlan_id)
 
         db.bmm_update(context, bmm["id"], {"instance_id": instance["id"],
-                                           "availability_zone": instance["availability_zone"] }) 
+                                           "availability_zone": cluster_name })
+
+        # update ofc
+        ofc_utils.update_for_run_instance(FLAGS.ofc_service_url, 
+                                          cluster_name, 
+                                          FLAGS.ofc_dpid, 
+                                          FLAGS.ofc_port_no, 
+                                          vlan_id,
+                                          create_cluster)
 
     def _find_a_bare_metal_machine(self, instance):
         inst_type_id = instance['instance_type_id']
@@ -197,14 +215,6 @@ class DodaiConnection(driver.ComputeDriver):
     def _reboot_or_power_on(self, ip):
         # TODO: to implement with ipmi
         time.sleep(120)
-
-    def _add_to_ofc(self):
-        # TODO: to implement
-        pass
-
-    def _add_to_ofc(self):
-        # TODO: to implement
-        pass
 
     def _cp_template(self, template_name, dest_path, params):
         f = open(utils.abspath("virt/dodai/" + template_name + ".template"), "r")
@@ -276,7 +286,6 @@ class DodaiConnection(driver.ComputeDriver):
         LOG.debug("reset_network")
         return
 
-
 class PowerManager(object):
 
     def __init__(self, instance_id, ip):
@@ -302,9 +311,3 @@ class PowerManager(object):
 
     def status(self):
         return self.cobbler.power_status(self.system)
-
-class OpenFlowClient(object):
-
-    def __init__(self):
-        pass
-
