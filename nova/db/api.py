@@ -1610,3 +1610,7 @@ def bmm_get_by_instance_type(context, instance_type):
 def bmm_get_by_instance_id(context, instance_id):
     """Get Bare Metal Machine records by instance id."""
     return IMPL.bmm_get_by_instance_id(context, instance_id)
+
+def bmm_get_by_availability_zone(context, zone):
+    """Get Bare Metal Machine records by availability zone."""
+    return IMPL.bmm_get_by_availability_zone(context, zone)

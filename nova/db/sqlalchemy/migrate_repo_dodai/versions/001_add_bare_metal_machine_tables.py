@@ -40,7 +40,8 @@ bare_metal_machines = Table('bare_metal_machines', meta,
         Column('ipmi_ip', String(length=255)),
         Column('ipmi_mac', String(length=255)),
         Column('pxe_mac', String(length=255)),
-        Column('ofs_port', String(length=255)),
+        Column('ofc_port', String(length=255)),
+        Column('vlan_id', Integer()),
         Column('status', String(length=255)),
         )
 

@@ -44,7 +44,6 @@ flags.DEFINE_string('cobbler_path', '/var/www/cobbler', 'Path of cobbler')
 flags.DEFINE_string('pxe_boot_path', '/var/lib/tftpboot/pxelinux.cfg', 'Path of pxeboot folder')
 flags.DEFINE_string('ofc_service_url', None, 'URL of open flow controller service.')
 flags.DEFINE_string('ofc_dpid', None, 'Dpid of open flow controller.')
-flags.DEFINE_string('ofc_port_no', None, 'Port number of open flow controller.')
 
 def get_connection(_):
     # The read_only parameter is ignored.
@@ -172,7 +171,7 @@ class DodaiConnection(driver.ComputeDriver):
 
         parts = instance["availability_zone"].split(":")
         create_cluster = False
-        if len(parts) == 3:
+        if len(parts) == 3 and parts[0] == "C":
             parts.pop(0)
             create_cluster = True
 
@@ -180,13 +179,15 @@ class DodaiConnection(driver.ComputeDriver):
         vlan_id = int(vlan_id)
 
         db.bmm_update(context, bmm["id"], {"instance_id": instance["id"],
-                                           "availability_zone": cluster_name })
+                                           "availability_zone": cluster_name,
+                                           "vlan_id": vlan_id,
+                                           "status": "used"})
 
         # update ofc
         ofc_utils.update_for_run_instance(FLAGS.ofc_service_url, 
                                           cluster_name, 
-                                          FLAGS.ofc_dpid, 
-                                          FLAGS.ofc_port_no, 
+                                          FLAGS.ofc_dpid,
+                                          bmm["ofc_port"] 
                                           vlan_id,
                                           create_cluster)
 
@@ -254,10 +255,20 @@ class DodaiConnection(driver.ComputeDriver):
         self._reboot_or_power_on()
         utils.execute("rm", "-rf", self._get_cobbler_path(instance));
 
-        bmm = db.bmm_find_by_instance_id(None, instance["id"])
-        db.bmm_update(None, bmm["id"], { "instance_id": None, "availability_zone": None })
+        bmm = db.bmm_get_by_instance_id(None, instance["id"])
+        bmms = db.bmm_get_by_availability_zone(None, bmm["availability_zone"])
+        delete_cluster = len(bmms) == 1
 
-        self._remove_from_ofc()
+        db.bmm_update(None, bmm["id"], {"instance_id": None, 
+                                        "availability_zone": None,
+                                        "vlan_id": None})
+
+        ofc_utils.update_for_terminate_instance(FLAGS.ofc_service_url,
+                                                bmm["availability_zone"],
+                                                FLAGS.ofc_dpid,
+                                                bmm["ofc_port"],
+                                                bmm["vlan_id"],
+                                                delete_cluster)
 
     def reboot(self, instance, network_info):
         """Reboot the specified instance.

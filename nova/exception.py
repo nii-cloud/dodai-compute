@@ -846,7 +846,7 @@ class BareMetalMachineNotFoundByInstanceType(NotFound):
     message = _("Bare Metal Machine %(instance_type)s could not be found.")
 
 class BareMetalMachineNotFoundByInstanceId(NotFound):
-    message = _("Bare Metal Machine %(instance_id)s could not be found.")
+    message = _("Bare Metal Machine %(instance_id)d could not be found.")
 
 class OFCRegionNotFound(NotFound):
     message = _("Region %(region_name)s of open flow controller could not be found.")

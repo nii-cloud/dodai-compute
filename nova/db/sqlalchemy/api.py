@@ -4109,4 +4109,18 @@ def bmm_get_by_instance_id(context, instance_id, session=None):
         raise exception.BareMetalMachineNotFoundByInstanceId(instance_id=instance_id)
 
     return result
+
+
+def bmm_get_by_availability_zone(context, zone, session=None):
+    """
+    Get Bare Metal Machine record by availability zone.
+    """
+    if not session:
+        session = get_session_dodai()
+    result = None
+    result = session.query(models.BareMetalMachine).\
+                     filter_by(availability_zone=zone)
+
+    return result
+
     ####################
