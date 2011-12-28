@@ -873,7 +873,8 @@ class BareMetalMachine(BASE, NovaBase):
     ipmi_ip = Column(String(255))
     ipmi_mac = Column(String(255))
     pxe_mac = Column(String(255))
-    ofs_port = Column(String(255))
+    ofc_port = Column(String(255))
+    vlan_id = Column(Integer())
     status = Column(String(255))
 
 
