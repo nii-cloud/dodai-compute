@@ -198,7 +198,7 @@ class DodaiConnection(driver.ComputeDriver):
         ofc_utils.update_for_run_instance(FLAGS.ofc_service_url, 
                                           cluster_name, 
                                           FLAGS.ofc_dpid,
-                                          bmm["ofc_port"] 
+                                          bmm["ofc_port"], 
                                           vlan_id,
                                           create_cluster)
 
