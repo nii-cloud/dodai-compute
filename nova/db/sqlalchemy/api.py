@@ -4069,7 +4069,7 @@ def bmm_get_all(context):
     """
     Get all Bare Metal Machine records.
     """
-    session = get_session()
+    session = get_session_dodai()
     return session.query(models.BareMetalMachine).\
                    filter_by(deleted=False).\
                    all()

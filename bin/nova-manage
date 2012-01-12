@@ -1167,6 +1167,52 @@ class DodaiDbCommands(object):
         """Print the current database version."""
         print migration.db_version_dodai()
 
+class DodaiMachineCommands(object):
+    """Class for managing physical machines."""
+
+    def __init__(self):
+        pass
+
+    def list(self):
+        bmms = db.bmm_get_all(None)
+        if len(bmms) == 0:
+            return
+
+        excluded_columns = ['deleted_at', 'created_at', 'updated_at', 'deleted', 'id', 'local_gb', 'memory_mb']
+        columns = [x for x in bmms[0].__dict__.keys() if x not in excluded_columns and x[0] != '_']
+        columns.sort()
+        print '\t'.join(columns)
+        for bmm in bmms:
+            print '\t'.join([bmm[column] or 'None' for column in columns])
+
+    @args('--instance_type', dest="instance_type", metavar='<instance_type>',
+            help='Instance type')
+    @args('--instance_id', dest="instance_id", metavar='<instance_id>', default='', help='Instance ID')
+    @args('--ipmi_ip', dest='ipmi_ip', help='IPMI ip address.')
+    @args('--ipmi_mac', dest="ipmi_mac", metavar='<ipmi_mac>', help='IPMI mac address.')
+    @args('--pxe_mac', dest="pxe_mac", metavar='<pxe_mac>', help='PXE mac address.')
+    @args('--ofc_port', dest="ofc_port", metavar='<ofc_port>', help='OFC port number.')
+    def create(self, instance_type, instance_id, ipmi_ip, ipmi_mac, pxe_mac, ofc_port):
+        if (instance_id == ''):
+            instance_id = 'i-' + ''.join(['%02X' % int(part) for part in ipmi_ip.split('.')])
+
+        db.bmm_create(None, {
+            'instance_type': instance_type,
+            'instance_id': instance_id,
+            'ipmi_ip': ipmi_ip,
+            'ipmi_mac': ipmi_mac,
+            'pxe_mac': pxe_mac,
+            'ofc_port': ofc_port,
+            'availability_zone': 'resource_pool',
+            'status': 'inactive',
+        })
+
+
+    @args('--instance_id', dest="instance_id", metavar='<instance_id>', help='Instance ID.')
+    def delete(self, instance_id):
+        bmm = db.bmm_get_by_instance_id(None, instance_id)
+        db.bmm_destroy(None, bmm.id)
+
 
 class VersionCommands(object):
     """Class for exposing the codebase version."""
@@ -2040,6 +2086,7 @@ CATEGORIES = [
     ('config', ConfigCommands),
     ('db', DbCommands),
     ('dodai_db', DodaiDbCommands),
+    ('dodai_machine', DodaiMachineCommands),
     ('drive', VsaDriveTypeCommands),
     ('fixed', FixedIpCommands),
     ('flavor', InstanceTypeCommands),
