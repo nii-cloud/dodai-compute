@@ -4075,7 +4075,7 @@ def bmm_get_all(context):
                    all()
 
 
-def bmm_get_by_instance_type(context, instance_type, session=None):
+def bmm_get_by_instance_type(context, bmm_instance_type, session=None):
     """
     Get Bare Metal Machine record by instance type.
     """
@@ -4083,17 +4083,16 @@ def bmm_get_by_instance_type(context, instance_type, session=None):
         session = get_session_dodai()
     result = None
     result = session.query(models.BareMetalMachine).\
-                     filter_by(instance_type=instance_type).\
-                     filter_by(status="active").\
+                     filter_by(instance_type=bmm_instance_type).\
                      filter_by(deleted=False).\
                      first()
 
     if not result:
-        raise exception.BareMetalMachineNotFoundByInstanceType(instance_type=instance_type)
+        raise exception.BareMetalMachineNotFoundByInstanceType(instance_type=bmm_instance_type)
 
     return result
 
-def bmm_get_by_instance_id(context, instance_id, session=None):
+def bmm_get_by_instance_id(context, bmm_instance_id, session=None):
     """
     Get Bare Metal Machine record by instance id.
     """
@@ -4101,17 +4100,17 @@ def bmm_get_by_instance_id(context, instance_id, session=None):
         session = get_session_dodai()
     result = None
     result = session.query(models.BareMetalMachine).\
-                     filter_by(instance_id=instance_id).\
+                     filter_by(instance_id=bmm_instance_id).\
                      first()
 
 
     if not result:
-        raise exception.BareMetalMachineNotFoundByInstanceId(instance_id=instance_id)
+        raise exception.BareMetalMachineNotFoundByInstanceId(instance_id=bmm_instance_id)
 
     return result
 
 
-def bmm_get_by_availability_zone(context, zone, session=None):
+def bmm_get_by_availability_zone(context, bmm_zone, session=None):
     """
     Get Bare Metal Machine record by availability zone.
     """
@@ -4119,7 +4118,7 @@ def bmm_get_by_availability_zone(context, zone, session=None):
         session = get_session_dodai()
     result = None
     result = session.query(models.BareMetalMachine).\
-                     filter_by(availability_zone=zone)
+                     filter_by(availability_zone=bmm_zone)
 
     return result
 

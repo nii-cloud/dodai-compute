@@ -1187,12 +1187,11 @@ class DodaiMachineCommands(object):
 
     @args('--instance_type', dest="instance_type", metavar='<instance_type>',
             help='Instance type')
-    @args('--instance_id', dest="instance_id", metavar='<instance_id>', default='', help='Instance ID')
+    @args('--instance_id', dest="instance_id", metavar='<instance_id>', default='', help='Instance ID(optional)')
     @args('--ipmi_ip', dest='ipmi_ip', help='IPMI ip address.')
-    @args('--ipmi_mac', dest="ipmi_mac", metavar='<ipmi_mac>', help='IPMI mac address.')
     @args('--pxe_mac', dest="pxe_mac", metavar='<pxe_mac>', help='PXE mac address.')
     @args('--ofc_port', dest="ofc_port", metavar='<ofc_port>', help='OFC port number.')
-    def create(self, instance_type, instance_id, ipmi_ip, ipmi_mac, pxe_mac, ofc_port):
+    def create(self, instance_type, instance_id, ipmi_ip, pxe_mac, ofc_port):
         if (instance_id == ''):
             instance_id = 'i-' + ''.join(['%02X' % int(part) for part in ipmi_ip.split('.')])
 
@@ -1200,7 +1199,6 @@ class DodaiMachineCommands(object):
             'instance_type': instance_type,
             'instance_id': instance_id,
             'ipmi_ip': ipmi_ip,
-            'ipmi_mac': ipmi_mac,
             'pxe_mac': pxe_mac,
             'ofc_port': ofc_port,
             'availability_zone': 'resource_pool',

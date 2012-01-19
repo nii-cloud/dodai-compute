@@ -1,0 +1,5 @@
+#!/bin/bash
+
+mysql -uroot -pnova nova -e 'delete from fixed_ips where virtual_interface_id is not null;'
+mysql -uroot -pnova nova -e 'delete from virtual_interfaces;'
+mysql -uroot -pnova nova -e 'delete from instances;'

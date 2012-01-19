@@ -21,7 +21,6 @@
 A dodai hypervisor.
 
 """
-import cobbler.api as capi
 import os
 import tempfile
 
@@ -48,6 +47,8 @@ flags.DEFINE_string('ofc_dpid', None, 'Dpid of open flow controller.')
 flags.DEFINE_integer('bmm_port', 3333, '')
 flags.DEFINE_string('bmm_status_path', "status", '')
 flags.DEFINE_string('bmm_action_path', "action", '')
+flags.DEFINE_string('ipmi_username', "", '')
+flags.DEFINE_string('ipmi_password', "", '')
 flags.DEFINE_integer('dodai_default_image', 1, '')
 
 def get_connection(_):
@@ -107,19 +108,27 @@ class DodaiConnection(driver.ComputeDriver):
         layer, as a list.
         """
         LOG.debug("list_instances")
-        return self.instances.keys()
 
-    def _map_to_instance_info(self, instance):
-        instance = utils.check_isinstance(instance, DodaiInstance)
-        info = driver.InstanceInfo(instance.name, instance.state)
-        return info
+        instance_ids = []
+        bmms = db.bmm_get_all(None)
+        for bmm in bmms:
+            if bmm["status"] != "active":
+                continue
+            instance_ids.append(bmm["instance_id"])
+
+        return instance_ids
 
     def list_instances_detail(self):
         """Return a list of InstanceInfo for all registered VMs"""
         LOG.debug("list_instances_detail")
+
         info_list = []
-        for instance in self.instances.values():
-            info_list.append(self._map_to_instance_info(instance))
+        bmms = db.bmm_get_all(None)
+        for bmm in bmms:
+            if bmm["status"] != "active":
+                continue
+            info_list.append(driver.InstanceInfo(bmm["instance_id"], "running"))
+
         return info_list        
 
     def spawn(self, context, instance,
@@ -164,7 +173,7 @@ class DodaiConnection(driver.ComputeDriver):
                            "COBBLER": FLAGS.cobbler, 
                            "DISK_SIZE": self._get_disk_size_mb(instance)})
         self._cp_template("pxeboot_create", 
-                          self._get_pxe_boot_file(), 
+                          self._get_pxe_boot_file(mac), 
                           {"INSTANCE_ID": instance["name"], "COBBLER": FLAGS.cobbler})
 
         LOG.debug("reboot or power on.")
@@ -173,11 +182,12 @@ class DodaiConnection(driver.ComputeDriver):
         # wait until starting to install os
         while BmmService.is_listening(bmm["ipmi_ip"]):
             greenthread.sleep(10)
-        self._cp_template("pxeboot_start", self._get_pxe_boot_file(), {})
+        self._cp_template("pxeboot_start", self._get_pxe_boot_file(mac), {})
 
         # wait until installation of os finished
         while not BmmService.is_listening(bmm["ipmi_ip"]):
             greenthread.sleep(10)
+            LOG.debug("wait %s until installation finished." % bmm["ipmi_ip"])
 
         # update db
         parts = instance["availability_zone"].split(":")
@@ -189,7 +199,7 @@ class DodaiConnection(driver.ComputeDriver):
         cluster_name, vlan_id = parts
         vlan_id = int(vlan_id)
 
-        db.bmm_update(context, bmm["id"], {"instance_id": instance["id"],
+        db.bmm_update(context, bmm["id"], {"instance_id": instance["name"],
                                            "availability_zone": cluster_name,
                                            "vlan_id": vlan_id,
                                            "status": "used"})
@@ -205,7 +215,7 @@ class DodaiConnection(driver.ComputeDriver):
     def _find_a_bare_metal_machine(self, instance):
         inst_type_id = instance['instance_type_id']
         inst_type = instance_types.get_instance_type(inst_type_id)
-        return db.bmm_get_by_instance_type(inst_type)
+        return db.bmm_get_by_instance_type(None, inst_type["name"])
 
     def _get_cobbler_path(self, instance, file_name = ""):
         return os.path.join(FLAGS.cobbler_path,
@@ -213,7 +223,7 @@ class DodaiConnection(driver.ComputeDriver):
                      instance["name"],
                      file_name)
 
-    def _get_pxe_boot_file(self):
+    def _get_pxe_boot_file(self, mac):
         return os.path.join(FLAGS.pxe_boot_path, mac)
 
     def _get_disk_size_mb(self, instance):
@@ -225,8 +235,13 @@ class DodaiConnection(driver.ComputeDriver):
         return inst_type["local_gb"] * 1024
 
     def _reboot_or_power_on(self, ip):
-        # TODO: to implement with ipmi
-        greenthread.sleep(120)
+        power_manager = PowerManager(ip)
+        status = power_manager.status()
+        LOG.debug(status)
+        if status == "off":
+            power_manager.on()
+        else:
+            power_manager.reboot()
 
     def _cp_template(self, template_name, dest_path, params):
         f = open(utils.abspath("virt/dodai/" + template_name + ".template"), "r")
@@ -256,16 +271,17 @@ class DodaiConnection(driver.ComputeDriver):
         """
         LOG.debug("destroy")
 
-        bmm = db.bmm_get_by_instance_id(None, instance["id"])
+        bmm = db.bmm_get_by_instance_id(None, instance["name"])
+        mac = bmm["pxe_mac"]
 
         # begin to delete os
         self._cp_template("delete.sh",
                           self._get_cobbler_path(instance, "delete.sh"), 
                           {})
         self._cp_template("pxeboot_delete",
-                          self._get_pxe_boot_file(),
+                          self._get_pxe_boot_file(mac),
                           {"INSTANCE_ID": instance["name"], "COBBLER": FLAGS.cobbler})
-        self._reboot_or_power_on()
+        self._reboot_or_power_on(bmm["ipmi_ip"])
 
         # wait until starting to delete os
         while BmmService.is_listening(bmm["ipmi_ip"]):
@@ -290,7 +306,7 @@ class DodaiConnection(driver.ComputeDriver):
                            "COBBLER": FLAGS.cobbler,
                            "DISK_SIZE": 10240})
         self._cp_template("pxeboot_create",
-                          self._get_pxe_boot_file(),
+                          self._get_pxe_boot_file(mac),
                           {"INSTANCE_ID": instance["name"], "COBBLER": FLAGS.cobbler})
 
         # wait until os installation finished.
@@ -323,6 +339,9 @@ class DodaiConnection(driver.ComputeDriver):
         """
         LOG.debug("reboot")
 
+        bmm = db.bmm_get_by_instance_id(instance["name"]
+        PowerManager(bmm["ipmi_ip"].reboot()
+
     def update_available_resource(self, ctxt, host):
         """Updates compute manager resource info on ComputeNode table.
 
@@ -343,29 +362,25 @@ class DodaiConnection(driver.ComputeDriver):
 
 class PowerManager(object):
 
-    def __init__(self, instance_id, ip):
-        self.cobbler = capi.BootAPI()
-
-        system = self.cobbler.new_system()
-        system.set_name(instance_id)
-        system.set_power_type("ipmi")
-        system.set_power_user(FLAGS.ipmi_user)
-        system.set_power_pass(FLAGS.ipmi_password)
-        system.set_power_address(ip)
-        self.cobbler.add_system(system)
-        self.system = system
+    def __init__(self, ip):
+        self.ip = ip
 
     def on(self):
-        return self.cobbler.power_on(self.system)
+        return self._execute("on")
 
     def off(self):
-        return self.cobbler.power_off(self.system)
+        return self._execute("off")
 
     def reboot(self):
-        return self.cobbler.reboot(self.system)
+        return self._execute("reset")
 
     def status(self):
-        return self.cobbler.power_status(self.system)
+        parts = self._execute("status").split(" ")
+        return parts[3].strip()
+
+    def _execute(self, subcommand):
+        out, err = utils.execute("/usr/bin/ipmitool", "-I", "lan", "-H", self.ip, "-U", "root", "-P", "root", "chassis", "power", subcommand)
+        return out
 
 class BmmService(object):
 
@@ -378,4 +393,3 @@ class BmmService(object):
             return False
 
         return True
-
