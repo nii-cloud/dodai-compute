@@ -1614,3 +1614,31 @@ def bmm_get_by_instance_id(context, instance_id):
 def bmm_get_by_availability_zone(context, zone):
     """Get Bare Metal Machine records by availability zone."""
     return IMPL.bmm_get_by_availability_zone(context, zone)
+
+
+####################
+
+
+def switch_create(context, values):
+    """Creates switch record."""
+    return IMPL.switch_create(context, values)
+
+def switch_update(context, switch_id, values):
+    """Updates switch record."""
+    return IMPL.switch_update(context, values)
+
+def switch_destroy(context, switch_id):
+    """Deletes switch record."""
+    return IMPL.switch_destroy(context, switch_id)
+
+def switch_get(context, switch_id):
+    """Get a switch record by switch id."""
+    return IMPL.switch_get_all(context, switch_id)
+
+def switch_get_all(context):
+    """Get all switch records."""
+    return IMPL.switch_get_all(context)
+
+def switch_get_by_dpid_and_outer_port(context, dpid, outer_port):
+    """Get a switch record by dpid and outer port."""
+    return IMPL.switch_get_by_dpid_and_outer_port(context, dpid, outer_port)

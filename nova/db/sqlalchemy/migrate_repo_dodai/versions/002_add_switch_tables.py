@@ -22,29 +22,14 @@ meta = MetaData()
 #
 # New Tables
 #
-bare_metal_machines = Table('bare_metal_machines', meta,
+switches = Table('switches', meta,
         Column('created_at', DateTime(timezone=False)),
         Column('updated_at', DateTime(timezone=False)),
         Column('deleted_at', DateTime(timezone=False)),
         Column('deleted', Boolean(create_constraint=True, name=None)),
         Column('id', Integer(), primary_key=True, nullable=False),
-        Column('name',
-               String(length=255, convert_unicode=False, assert_unicode=None,
-                      unicode_error=None, _warn_on_bytestring=False)),
-        Column('instance_id', String(length=255)),
-        Column('instance_type', String(length=255)),
-        Column('vcpus', Integer()),
-        Column('memory_mb', Integer()),
-        Column('local_gb', Integer()),
-        Column('availability_zone', String(length=255)),
-        Column('ipmi_ip', String(length=255)),
-        Column('pxe_mac', String(length=255)),
-        Column('server_port1', Integer()),
-        Column('server_port2', Integer()),
-        Column('dpid1', String(length=255)),
-        Column('dpid2', String(length=255)),
-        Column('vlan_id', Integer()),
-        Column('status', String(length=255)),
+        Column('dpid', String(length=255)),
+        Column('outer_port', Integer()),
         )
 
 
@@ -59,7 +44,7 @@ def upgrade(migrate_engine):
     # Upgrade operations go here. Don't create your own engine;
     # bind migrate_engine to your metadata
     meta.bind = migrate_engine
-    for table in (bare_metal_machines, ):
+    for table in (switches, ):
         try:
             table.create()
         except Exception:

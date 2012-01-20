@@ -1,28 +1,39 @@
 from suds.client import Client
 from nova import exception
+from nova import db
 
-def update_for_run_instance(service_url, region_name, dpid, port_no, vlan_id, create_region):
+import logging
+
+logging.getLogger('suds.client').setLevel(logging.CRITICAL)
+
+def update_for_run_instance(service_url, region_name, server_port1, server_port2, dpid1, dpid2, vlan_id, create_region):
     # check region name
-    client = Client(url)
+    client = Client(service_url + "?wsdl")
+
     if region_name not in client.service.showRegion():
        if not create_region:
            raise exception.OFCRegionNotFound(region_name)
 
-       client.service.createRegion(region_name) 
+       client.service.createRegion(region_name)
 
-    client.service.setServerPort(dpid, port_no, region_name)
-    client.service.setOuterPort(dpid, port_no)
-    client.service.setOuterPortAssociationSetting(dpid, port_no, vlan_id, vlan_id, region_name)
+       switches = db.switch_get_all(None)
+       for switch in switches:
+           client.service.setOuterPortAssociationSetting(switch["dpid"], switch["outer_port"], vlan_id, 65535, region_name)
+
+    client.service.setServerPort(dpid1, server_port1, region_name)
+    client.service.setServerPort(dpid2, server_port2, region_name)
     client.service.save()
 
-def update_for_terminate_instance(service_url, region_name, dpid, port_no, vlan_id, delete_region):
-    client = Client(url)
-    client.service.clearServerPort(dpid, port_no)
+def update_for_terminate_instance(service_url, region_name, server_port1, server_port2, dpid1, dpid2, vlan_id, delete_region):
+    client = Client(service_url + "?wsdl")
+    client.service.clearServerPort(dpid1, server_port1)
+    client.service.clearServerPort(dpid2, server_port2)
     if not delete_region:
         client.service.save()
         return
 
-    client.service.clearOuterPortAssociationSetting(dpid, port_no, vlan_id)
-    client.service.clearOuterPort(dpid, port_no)
+    switches = db.switch_get_all(None)
+    for switch in switches:
+        client.service.clearOuterPortAssociationSetting(switch["dpid"], switch["outer_port"], vlan_id)
     client.service.destroyRegion(region_name)
     client.service.save()

@@ -1190,17 +1190,27 @@ class DodaiMachineCommands(object):
     @args('--instance_id', dest="instance_id", metavar='<instance_id>', default='', help='Instance ID(optional)')
     @args('--ipmi_ip', dest='ipmi_ip', help='IPMI ip address.')
     @args('--pxe_mac', dest="pxe_mac", metavar='<pxe_mac>', help='PXE mac address.')
-    @args('--ofc_port', dest="ofc_port", metavar='<ofc_port>', help='OFC port number.')
-    def create(self, instance_type, instance_id, ipmi_ip, pxe_mac, ofc_port):
+    @args('--server_port1', dest="server_port1", metavar='<server_port1>', help='OFC port number for NIC1.')
+    @args('--server_port2', dest="server_port2", metavar='<server_port2>', help='OFC port number for NIC2.')
+    @args('--dpid1', dest="dpid1", metavar='<dpid1>', help='dpid for NIC1.')
+    @args('--dpid2', dest="dpid2", metavar='<dpid2>', help='dpid for NIC2.')
+    def create(self, instance_type, instance_id, ipmi_ip, pxe_mac, server_port1, server_port2, dpid1, dpid2):
         if (instance_id == ''):
             instance_id = 'i-' + ''.join(['%02X' % int(part) for part in ipmi_ip.split('.')])
+        if (dpid1 == ''):
+            dpid1 = '0000000000000001'
+        if (dpid2 == ''):
+            dpid2 = '0000000000000001'
 
         db.bmm_create(None, {
             'instance_type': instance_type,
             'instance_id': instance_id,
             'ipmi_ip': ipmi_ip,
             'pxe_mac': pxe_mac,
-            'ofc_port': ofc_port,
+            'server_port1': server_port1,
+            'server_port2': server_port2,
+            'dpid1': dpid1,
+            'dpid2': dpid2,
             'availability_zone': 'resource_pool',
             'status': 'inactive',
         })
@@ -1211,6 +1221,38 @@ class DodaiMachineCommands(object):
         bmm = db.bmm_get_by_instance_id(None, instance_id)
         db.bmm_destroy(None, bmm.id)
 
+class DodaiSwitchCommands(object):
+    """Class for managing switchs."""
+
+    def __init__(self):
+        pass
+
+    def list(self):
+        switches = db.switch_get_all(None)
+        if len(switches) == 0:
+            return
+
+        excluded_columns = ['deleted_at', 'created_at', 'updated_at', 'deleted', 'id']
+        columns = [x for x in switches[0].__dict__.keys() if x not in excluded_columns and x[0] != '_']
+        columns.sort()
+        print '\t'.join(columns)
+        for switch in switches:
+            print '\t'.join([str(switch[column]) or 'None' for column in columns])
+
+    @args('--dpid', dest="dpid", metavar='<dpid>', help='dpid')
+    @args('--outer_port', dest='outer_port', metavar='<outer_port>', help='Outer port number.')
+    def create(self, dpid, outer_port):
+        db.switch_create(None, {
+            'dpid': dpid,
+            'outer_port': outer_port,
+        })
+
+
+    @args('--dpid', dest="dpid", metavar='<dpid>', help='dpid')
+    @args('--outer_port', dest='outer_port', metavar='<outer_port>', help='Outer port number.')
+    def delete(self, dpid, outer_port):
+        switch = db.switch_get_by_dpid_and_outer_port(None, dpid, outer_port)
+        db.switch_destroy(None, switch.id)
 
 class VersionCommands(object):
     """Class for exposing the codebase version."""
@@ -2085,6 +2127,7 @@ CATEGORIES = [
     ('db', DbCommands),
     ('dodai_db', DodaiDbCommands),
     ('dodai_machine', DodaiMachineCommands),
+    ('dodai_switch', DodaiSwitchCommands),
     ('drive', VsaDriveTypeCommands),
     ('fixed', FixedIpCommands),
     ('flavor', InstanceTypeCommands),

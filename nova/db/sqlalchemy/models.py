@@ -872,10 +872,20 @@ class BareMetalMachine(BASE, NovaBase):
     availability_zone = Column(String(255))
     ipmi_ip = Column(String(255))
     pxe_mac = Column(String(255))
-    ofc_port = Column(String(255))
+    server_port1 = Column(Integer())
+    server_port2 = Column(Integer())
+    dpid1 = Column(String(255))
+    dpid2 = Column(String(255))
     vlan_id = Column(Integer())
     status = Column(String(255))
 
+class Switch(BASE, NovaBase):
+    """Represents a switch."""
+
+    __tablename__ = 'switches'
+    id = Column(Integer, primary_key=True)
+    dpid = Column(String(255))
+    outer_port = Column(Integer())
 
 def register_models():
     """Register Models and create metadata.
@@ -905,7 +915,7 @@ def register_models_dodai():
     connection is lost and needs to be reestablished.
     """
     from sqlalchemy import create_engine_dodai
-    models = (BareMetalMachine)
+    models = (BareMetalMachine, Switch)
     engine = create_engine(FLAGS.sql_connection_dodai, echo=False)
     for model in models:
         model.metadata.create_all(engine)

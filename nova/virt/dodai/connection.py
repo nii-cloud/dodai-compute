@@ -33,6 +33,7 @@ from nova.virt import driver
 from nova import db
 from nova.virt import images
 from nova import flags
+from nova.virt.dodai import ofc_utils
 
 from eventlet import greenthread
 
@@ -43,7 +44,6 @@ flags.DEFINE_string('cobbler', None, 'IP address of cobbler')
 flags.DEFINE_string('cobbler_path', '/var/www/cobbler', 'Path of cobbler')
 flags.DEFINE_string('pxe_boot_path', '/var/lib/tftpboot/pxelinux.cfg', 'Path of pxeboot folder')
 flags.DEFINE_string('ofc_service_url', None, 'URL of open flow controller service.')
-flags.DEFINE_string('ofc_dpid', None, 'Dpid of open flow controller.')
 flags.DEFINE_integer('bmm_port', 3333, '')
 flags.DEFINE_string('bmm_status_path', "status", '')
 flags.DEFINE_string('bmm_action_path', "action", '')
@@ -184,21 +184,24 @@ class DodaiConnection(driver.ComputeDriver):
             greenthread.sleep(10)
         self._cp_template("pxeboot_start", self._get_pxe_boot_file(mac), {})
 
-        # wait until installation of os finished
-        while not BmmService.is_listening(bmm["ipmi_ip"]):
-            greenthread.sleep(10)
-            LOG.debug("wait %s until installation finished." % bmm["ipmi_ip"])
+        ## wait until installation of os finished
+        #while not BmmService.is_listening(bmm["ipmi_ip"]):
+        #    greenthread.sleep(10)
+        #    LOG.debug("wait %s until installation finished." % bmm["ipmi_ip"])
 
-        # update db
-        parts = instance["availability_zone"].split(":")
-        create_cluster = False
-        if len(parts) == 3 and parts[0] == "C":
-            parts.pop(0)
-            create_cluster = True
+        ## update db
+        #parts = instance["availability_zone"].split(":")
+        #create_cluster = False
+        #if len(parts) == 3 and parts[0] == "C":
+        #    parts.pop(0)
+        #    create_cluster = True
 
-        cluster_name, vlan_id = parts
-        vlan_id = int(vlan_id)
+        #cluster_name, vlan_id = parts
+        #vlan_id = int(vlan_id)
 
+        create_cluster = True
+        cluster_name = "cluster1"
+        vlan_id = 10
         db.bmm_update(context, bmm["id"], {"instance_id": instance["name"],
                                            "availability_zone": cluster_name,
                                            "vlan_id": vlan_id,
@@ -207,8 +210,10 @@ class DodaiConnection(driver.ComputeDriver):
         # update ofc
         ofc_utils.update_for_run_instance(FLAGS.ofc_service_url, 
                                           cluster_name, 
-                                          FLAGS.ofc_dpid,
-                                          bmm["ofc_port"], 
+                                          bmm["server_port1"],
+                                          bmm["server_port2"],
+                                          bmm["dpid1"],
+                                          bmm["dpid2"],
                                           vlan_id,
                                           create_cluster)
 
@@ -325,9 +330,10 @@ class DodaiConnection(driver.ComputeDriver):
         # update ofc
         ofc_utils.update_for_terminate_instance(FLAGS.ofc_service_url,
                                                 bmm["availability_zone"],
-                                                FLAGS.ofc_dpid,
-                                                bmm["ofc_port"],
-                                                bmm["vlan_id"],
+                                                bmm["server_port1"],
+                                                bmm["server_port2"],
+                                                bmm["dpid1"],
+                                                bmm["dpid2"],
                                                 delete_cluster)
 
     def reboot(self, instance, network_info):
@@ -339,8 +345,8 @@ class DodaiConnection(driver.ComputeDriver):
         """
         LOG.debug("reboot")
 
-        bmm = db.bmm_get_by_instance_id(instance["name"]
-        PowerManager(bmm["ipmi_ip"].reboot()
+        bmm = db.bmm_get_by_instance_id(instance["name"])
+        PowerManager(bmm["ipmi_ip"]).reboot()
 
     def update_available_resource(self, ctxt, host):
         """Updates compute manager resource info on ComputeNode table.
@@ -379,7 +385,7 @@ class PowerManager(object):
         return parts[3].strip()
 
     def _execute(self, subcommand):
-        out, err = utils.execute("/usr/bin/ipmitool", "-I", "lan", "-H", self.ip, "-U", "root", "-P", "root", "chassis", "power", subcommand)
+        out, err = utils.execute("/usr/bin/ipmitool", "-I", "lan", "-H", self.ip, "-U", FLAGS.ipmi_username, "-P", FLAGS.ipmi_password, "chassis", "power", subcommand)
         return out
 
 class BmmService(object):

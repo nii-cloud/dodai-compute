@@ -4101,6 +4101,7 @@ def bmm_get_by_instance_id(context, bmm_instance_id, session=None):
     result = None
     result = session.query(models.BareMetalMachine).\
                      filter_by(instance_id=bmm_instance_id).\
+                     filter_by(deleted=False).\
                      first()
 
 
@@ -4118,8 +4119,87 @@ def bmm_get_by_availability_zone(context, bmm_zone, session=None):
         session = get_session_dodai()
     result = None
     result = session.query(models.BareMetalMachine).\
-                     filter_by(availability_zone=bmm_zone)
+                     filter_by(availability_zone=bmm_zone).\
+                     all()
 
     return result
 
     ####################
+
+def switch_create(context, values, session=None):
+    """
+    Creates switch record.
+    """
+    session = get_session_dodai()
+    try:
+        with session.begin():
+            switch_ref = models.Switch()
+            switch_ref.update(values)
+            switch_ref.save(session)
+    except Exception, e:
+        raise exception.DBError(e)
+    return switch_ref
+
+def switch_update(context, switch_id, values, session=None):
+    """
+    Updates switch record.
+    """
+    session = get_session_dodai()
+    with session.begin():
+        switch_ref = switch_get(context, switch_id, session=session)
+        switch_ref.update(values)
+        switch_ref.save(session=session)
+    return switch_ref
+
+def switch_destroy(context, switch_id, session=None):
+    """
+    Deletes switch record.
+    """
+    session = get_session_dodai()
+    with session.begin():
+        session.query(models.Switch).\
+                filter_by(id=switch_id).\
+                update({'deleted': True,
+                        'deleted_at': utils.utcnow(),
+                        'updated_at': literal_column('updated_at')})
+
+def switch_get(context, switch_id, session=None):
+    """
+    Get a switch record by switch id.
+    """
+    if not session:
+        session = get_session_dodai()
+    result = None
+    result = session.query(models.Switch).\
+                     filter_by(id=switch_id).\
+                     filter_by(deleted=False).\
+                     first()
+    if not result:
+        raise exception.SwitchNotFound(id=switch_id)
+
+    return result
+
+def switch_get_by_dpid_and_outer_port(context, dpid, outer_port, session=None):
+    """
+    Get a switch record by dpid and outer port.
+    """
+    if not session:
+        session = get_session_dodai()
+    result = None
+    result = session.query(models.Switch).\
+                     filter_by(dpid=dpid).\
+                     filter_by(outer_port=outer_port).\
+                     filter_by(deleted=False).\
+                     first()
+
+    return result
+
+
+def switch_get_all(context, session=None):
+    """
+    Get all switch records.
+    """
+    session = get_session_dodai()
+    return session.query(models.Switch).\
+                   filter_by(deleted=False).\
+                   all()
