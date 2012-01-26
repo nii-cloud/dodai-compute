@@ -175,6 +175,7 @@ class DodaiConnection(driver.ComputeDriver):
         else: 
             if bmm["availability_zone"] == "resource_pool" and bmm["status"] == "active":
                 db.instance_destroy(context, bmm["instance_id"])
+                db.bmm_update(bmm["id"], {"availability_zone": cluster_name, "status": "used"}) 
                 self._update_ofc(bmm, cluster_name, vlan_id, create_cluster)
             else:
                 self._install_machine(context, instance, bmm, cluster_name, vlan_id)
