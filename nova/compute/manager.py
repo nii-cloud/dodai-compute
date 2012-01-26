@@ -476,12 +476,17 @@ class ComputeManager(manager.SchedulerDependentManager):
         self._run_instance(context, instance_id, **kwargs)
 
     @exception.wrap_exception(notifier=notifier, publisher_id=publisher_id())
-    @checks_instance_lock
+    #@checks_instance_lock
     def start_instance(self, context, instance_id):
         """Starting an instance on this host."""
-        # TODO(yamahata): injected_files isn't supported.
-        #                 Anyway OSAPI doesn't support stop/start yet
-        self._run_instance(context, instance_id)
+        def _inner_start_instance():
+            instance = self.db.instance_get(context, instance_id) 
+            self.driver.start(context, instance)
+            self._instance_update(context,
+                                  instance_id,
+                                  vm_state=vm_states.ACTIVE,
+                                  task_state=None)
+        greenthread.spawn(_inner_start_instance)
 
     def _shutdown_instance(self, context, instance_id, action_str):
         """Shutdown an instance on this host."""
@@ -545,17 +550,20 @@ class ComputeManager(manager.SchedulerDependentManager):
         greenthread.spawn(_inner_terminate_instance)
 
     @exception.wrap_exception(notifier=notifier, publisher_id=publisher_id())
-    @checks_instance_lock
+    #@checks_instance_lock
     def stop_instance(self, context, instance_id):
         """Stopping an instance on this host."""
 
         def _inner_stop_instance():
-            self._shutdown_instance(context, instance_id, 'Stopping')
-            self.driver.stop(context, instance)
+            #self._shutdown_instance(context, instance_id, 'Stopping')
+
+            instance = self.db.instance_get(context, instance_id)
             self._instance_update(context,
                                   instance_id,
                                   vm_state=vm_states.STOPPED,
                                   task_state=None)
+            self.driver.stop(context, instance)
+        greenthread.spawn(_inner_stop_instance)
 
     @exception.wrap_exception(notifier=notifier, publisher_id=publisher_id())
     @checks_instance_lock

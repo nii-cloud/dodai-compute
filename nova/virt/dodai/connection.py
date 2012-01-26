@@ -427,11 +427,13 @@ class DodaiConnection(driver.ComputeDriver):
         self._install_machine(context, instance, bmm, "resource_pool", None, True)
 
     def stop(self, context, instance):
-        bmm = db.bmm_get_by_instance_id(instance["id"])
+        LOG.debug("stop")
+        bmm = db.bmm_get_by_instance_id(context, instance["id"])
         PowerManager(bmm["ipmi_ip"]).off() 
 
     def start(self, context, instance):
-        bmm = db.bmm_get_by_instance_id(instance["id"])
+        LOG.debug("start")
+        bmm = db.bmm_get_by_instance_id(context, instance["id"])
         PowerManager(bmm["ipmi_ip"]).on() 
 
     def reboot(self, instance, network_info):
@@ -443,7 +445,7 @@ class DodaiConnection(driver.ComputeDriver):
         """
         LOG.debug("reboot")
 
-        bmm = db.bmm_get_by_instance_id(instance["id"])
+        bmm = db.bmm_get_by_instance_id(None, instance["id"])
         PowerManager(bmm["ipmi_ip"]).reboot()
 
     def update_available_resource(self, ctxt, host):
