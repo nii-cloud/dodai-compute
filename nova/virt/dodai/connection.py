@@ -266,15 +266,17 @@ class DodaiConnection(driver.ComputeDriver):
             db.instance_update(context, instance["id"], {"vm_state": vm_states.ACTIVE})
     
     def _update_ofc(self, bmm, cluster_name, vlan_id, create_cluster):
-        ofc_utils.update_for_run_instance(FLAGS.ofc_service_url, 
-                                          cluster_name, 
-                                          bmm["server_port1"],
-                                          bmm["server_port2"],
-                                          bmm["dpid1"],
-                                          bmm["dpid2"],
-                                          vlan_id,
-                                          create_cluster)
-
+        try:
+            ofc_utils.update_for_run_instance(FLAGS.ofc_service_url, 
+                                              cluster_name, 
+                                              bmm["server_port1"],
+                                              bmm["server_port2"],
+                                              bmm["dpid1"],
+                                              bmm["dpid2"],
+                                              vlan_id,
+                                              create_cluster)
+        except:
+            pass
 
     def _get_state(self, instance):
         path = self._get_cobbler_path(instance, "state")
@@ -306,10 +308,12 @@ class DodaiConnection(driver.ComputeDriver):
             LOG.debug(bmm["status"])
             instance_ref = db.instance_get(context, bmm["instance_id"])
             if instance_ref["image_ref"] == instance["image_ref"]:
+                db.bmm_update(context, bmm["id"], {"status": "processing"})
                 return bmm
 
         for bmm in db.bmm_get_all_by_instance_type(context, inst_type["name"]):
-            if bmm["status"] != "used":
+            if bmm["status"] != "used" and bmm["status"] != "processing":
+                db.bmm_update(context, bmm["id"], {"status": "processing"})
                 return bmm
 
         raise exception.BareMetalMachineUnavailable()  
@@ -398,14 +402,17 @@ class DodaiConnection(driver.ComputeDriver):
         delete_cluster = len(bmms) == 1
 
         # update ofc
-        ofc_utils.update_for_terminate_instance(FLAGS.ofc_service_url,
-                                                bmm["availability_zone"],
-                                                bmm["server_port1"],
-                                                bmm["server_port2"],
-                                                bmm["dpid1"],
-                                                bmm["dpid2"],
-                                                bmm["vlan_id"],
-                                                delete_cluster)
+        try:
+            ofc_utils.update_for_terminate_instance(FLAGS.ofc_service_url,
+                                                    bmm["availability_zone"],
+                                                    bmm["server_port1"],
+                                                    bmm["server_port2"],
+                                                    bmm["dpid1"],
+                                                    bmm["dpid2"],
+                                                    bmm["vlan_id"],
+                                                    delete_cluster)
+        except:
+            pass
 
         # update db
         db.bmm_update(context, bmm["id"], {"instance_id": None, 
