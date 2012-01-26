@@ -1167,6 +1167,14 @@ class DodaiDbCommands(object):
         """Print the current database version."""
         print migration.db_version_dodai()
 
+
+def _dodai_cmp(x, y):
+    if x == "id":
+        return -1
+    if y == "id":
+        return 1
+    return cmp(x, y)
+
 class DodaiMachineCommands(object):
     """Class for managing physical machines."""
 
@@ -1178,25 +1186,28 @@ class DodaiMachineCommands(object):
         if len(bmms) == 0:
             return
 
-        excluded_columns = ['deleted_at', 'created_at', 'updated_at', 'deleted', 'id', 'local_gb', 'memory_mb']
+        excluded_columns = ['deleted_at', 'created_at', 'updated_at', 'deleted', 'local_gb', 'memory_mb', 'vcpus']
         columns = [x for x in bmms[0].__dict__.keys() if x not in excluded_columns and x[0] != '_']
-        columns.sort()
+        columns.sort(cmp = lambda x, y: _dodai_cmp(x, y))
         print '\t'.join(columns)
         for bmm in bmms:
-            print '\t'.join([bmm[column] or 'None' for column in columns])
+            print '\t'.join([str(bmm[column]) or 'None' for column in columns])
 
     @args('--instance_type', dest="instance_type", metavar='<instance_type>',
             help='Instance type')
-    @args('--instance_id', dest="instance_id", metavar='<instance_id>', default='', help='Instance ID(optional)')
+    @args('--name', dest="name", metavar='<name>', default='', help='Machine host name')
     @args('--ipmi_ip', dest='ipmi_ip', help='IPMI ip address.')
+    @args('--pxe_ip', dest="pxe_ip", metavar='<pxe_ip>', help='PXE ip address.')
     @args('--pxe_mac', dest="pxe_mac", metavar='<pxe_mac>', help='PXE mac address.')
+    @args('--storage_ip', dest="storage_ip", metavar='<storage_ip>', help='Storage ip address.')
+    @args('--storage_mac', dest="storage_mac", metavar='<storage_mac>', help='Storage mac address.')
+    @args('--service_mac1', dest="service_mac1", metavar='<service_mac1>', help='Mac address of NIC1 in service segment.')
+    @args('--service_mac2', dest="service_mac2", metavar='<service_mac2>', help='Mac address of NIC2 in service segment.')
     @args('--server_port1', dest="server_port1", metavar='<server_port1>', help='OFC port number for NIC1.')
     @args('--server_port2', dest="server_port2", metavar='<server_port2>', help='OFC port number for NIC2.')
     @args('--dpid1', dest="dpid1", metavar='<dpid1>', help='dpid for NIC1.')
     @args('--dpid2', dest="dpid2", metavar='<dpid2>', help='dpid for NIC2.')
-    def create(self, instance_type, instance_id, ipmi_ip, pxe_mac, server_port1, server_port2, dpid1, dpid2):
-        if (instance_id == ''):
-            instance_id = 'i-' + ''.join(['%02X' % int(part) for part in ipmi_ip.split('.')])
+    def create(self, instance_type, name, ipmi_ip, pxe_ip, pxe_mac, storage_ip, storage_mac, service_mac1, service_mac2, server_port1, server_port2, dpid1, dpid2):
         if (dpid1 == ''):
             dpid1 = '0000000000000001'
         if (dpid2 == ''):
@@ -1204,9 +1215,14 @@ class DodaiMachineCommands(object):
 
         db.bmm_create(None, {
             'instance_type': instance_type,
-            'instance_id': instance_id,
+            'name': name,
             'ipmi_ip': ipmi_ip,
+            'pxe_ip': pxe_ip,
             'pxe_mac': pxe_mac,
+            'storage_ip': storage_ip,
+            'storage_mac': storage_mac,
+            'service_mac1': service_mac1,
+            'service_mac2': service_mac2,
             'server_port1': server_port1,
             'server_port2': server_port2,
             'dpid1': dpid1,
@@ -1216,9 +1232,9 @@ class DodaiMachineCommands(object):
         })
 
 
-    @args('--instance_id', dest="instance_id", metavar='<instance_id>', help='Instance ID.')
-    def delete(self, instance_id):
-        bmm = db.bmm_get_by_instance_id(None, instance_id)
+    @args('--name', dest="name", metavar='<name>', help='Server host name.')
+    def delete(self, name):
+        bmm = db.bmm_get_by_name(None, name)
         db.bmm_destroy(None, bmm.id)
 
 class DodaiSwitchCommands(object):
@@ -1232,9 +1248,9 @@ class DodaiSwitchCommands(object):
         if len(switches) == 0:
             return
 
-        excluded_columns = ['deleted_at', 'created_at', 'updated_at', 'deleted', 'id']
+        excluded_columns = ['deleted_at', 'created_at', 'updated_at', 'deleted']
         columns = [x for x in switches[0].__dict__.keys() if x not in excluded_columns and x[0] != '_']
-        columns.sort()
+        columns.sort(cmp = lambda x, y: _dodai_cmp(x, y))
         print '\t'.join(columns)
         for switch in switches:
             print '\t'.join([str(switch[column]) or 'None' for column in columns])

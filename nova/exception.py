@@ -836,6 +836,12 @@ class ZoneRequestError(Error):
 class InsufficientFreeMemory(NovaException):
     message = _("Insufficient free memory on compute node to start %(uuid)s.")
 
+class BareMetalMachineUnavailable(NovaException):
+    message = _("Bare Metal Machine is unavailable.")
+
+class AssociateAddressFailed(NovaException):
+    message = _("Assoicating addresss failed.")
+
 class BareMetalMachineNotFound(NotFound):
     message = _("Bare Metal Machine %(id)d could not be found.")
 

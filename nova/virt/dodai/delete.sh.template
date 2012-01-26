@@ -1,4 +1,12 @@
 #!/bin/bash
 
-dd if=/dev/zero of=/dev/sda
+cobbler=COBBLER
+monitor_port=MONITOR_PORT
+instance_id=INSTANCE_ID
+
+# TODO: just for SI1
+#dd if=/dev/zero of=/dev/sda
+
+wget http://$cobbler:$monitor_port/$instance_id/deleted -q
+
 reboot

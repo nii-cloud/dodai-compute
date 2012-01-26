@@ -55,13 +55,13 @@ from nova import network
 from nova import rpc
 from nova import utils
 from nova import volume
+from nova import db
 from nova.compute import power_state
 from nova.compute import task_states
 from nova.compute import vm_states
 from nova.notifier import api as notifier
 from nova.compute.utils import terminate_volumes
 from nova.virt import driver
-
 
 FLAGS = flags.FLAGS
 flags.DEFINE_string('instances_path', '$state_path/instances',
@@ -495,32 +495,43 @@ class ComputeManager(manager.SchedulerDependentManager):
         if not FLAGS.stub_network:
             self.network_api.deallocate_for_instance(context, instance)
 
-        volumes = instance.get('volumes') or []
-        for volume in volumes:
-            self._detach_volume(context, instance_id, volume['id'], False)
+        #volumes = instance.get('volumes') or []
+        #for volume in volumes:
+        #    self._detach_volume(context, instance_id, volume['id'], False)
 
-        if instance['power_state'] == power_state.SHUTOFF:
-            self.db.instance_destroy(context, instance_id)
-            raise exception.Error(_('trying to destroy already destroyed'
-                                    ' instance: %s') % instance_id)
-        self.driver.destroy(instance, network_info)
+        #if instance['power_state'] == power_state.SHUTOFF:
+        #    self.db.instance_destroy(context, instance_id)
+        #    raise exception.Error(_('trying to destroy already destroyed'
+        #                            ' instance: %s') % instance_id)
+        return self.driver.destroy(context, instance, network_info)
 
-        if action_str == 'Terminating':
-            terminate_volumes(self.db, context, instance_id)
+        #if action_str == 'Terminating':
+        #    terminate_volumes(self.db, context, instance_id)
 
     @exception.wrap_exception(notifier=notifier, publisher_id=publisher_id())
     @checks_instance_lock
     def terminate_instance(self, context, instance_id):
         """Terminate an instance on this host."""
         def _inner_terminate_instance():
-            self._shutdown_instance(context, instance_id, 'Terminating')
+            bmm = self._shutdown_instance(context, instance_id, 'Terminating')
             instance = self.db.instance_get(context.elevated(), instance_id)
+            instance_new = db.instance_create(context, 
+                {"availability_zone": "resource_pool",
+                 "user_id": instance["user_id"],
+                 "project_id": instance["project_id"],
+                 "kernel_id": instance["kernel_id"],
+                 "host": instance["host"],
+                 "display_name": instance["display_name"],
+                 "instance_type_id": instance["instance_type_id"],
+                 "vm_state": vm_states.BUILDING,
+                 "image_ref": FLAGS.dodai_default_image})
+
             self._instance_update(context,
                                   instance_id,
                                   vm_state=vm_states.DELETED,
                                   task_state=None,
                                   terminated_at=utils.utcnow())
-    
+
             self.db.instance_destroy(context, instance_id)
     
             usage_info = utils.usage_from_instance(instance)
@@ -528,17 +539,22 @@ class ComputeManager(manager.SchedulerDependentManager):
                             'compute.instance.delete',
                             notifier.INFO, usage_info)
 
+            self.driver.add_to_resource_pool(context, instance_new, bmm)
+
         greenthread.spawn(_inner_terminate_instance)
 
     @exception.wrap_exception(notifier=notifier, publisher_id=publisher_id())
     @checks_instance_lock
     def stop_instance(self, context, instance_id):
         """Stopping an instance on this host."""
-        self._shutdown_instance(context, instance_id, 'Stopping')
-        self._instance_update(context,
-                              instance_id,
-                              vm_state=vm_states.STOPPED,
-                              task_state=None)
+
+        def _inner_stop_instance():
+            self._shutdown_instance(context, instance_id, 'Stopping')
+            self.driver.stop(context, instance)
+            self._instance_update(context,
+                                  instance_id,
+                                  vm_state=vm_states.STOPPED,
+                                  task_state=None)
 
     @exception.wrap_exception(notifier=notifier, publisher_id=publisher_id())
     @checks_instance_lock

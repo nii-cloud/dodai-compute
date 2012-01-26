@@ -22,6 +22,8 @@
 import novaclient
 import re
 import time
+import httplib
+import urllib
 
 from nova import block_device
 from nova import exception
@@ -40,7 +42,7 @@ from nova.compute import vm_states
 from nova.compute.utils import terminate_volumes
 from nova.scheduler import api as scheduler_api
 from nova.db import base
-
+from nova import db
 
 LOG = logging.getLogger('nova.compute.api')
 
@@ -1406,7 +1408,26 @@ class API(base.Base):
         :param address: is a string floating ip address
         """
         instance = self.get(context, instance_id)
-        
+        ip, netmask, gw, dns = address.split(",")
+        bmm = db.bmm_get_by_instance_id(instance_id)
+
+        conn = httplib.HTTPConnection(bmm["pxe_ip"])
+        params = urllib.urlencode({'ip_address': ip, 
+                                   'subnet_mask': netmask, 
+                                   'default_gateway': gw, 
+                                   'dns': dns,
+                                   'mac_address[0]': bmm["service_mac1"],
+                                   'mac_address[1]': bmm["service_mac2"]})
+        headers = {'Content-type': 'application/x-www-form-urlencoded', 'Accept': 'text/plain'}
+        conn.request("PUT", "services/dodai-instance/networks.json", params, headers)
+        response = conn.getresponse()
+        data = response.read()
+        LOG.debug(response.status)
+        LOG.debug(response.reason)
+        LOG.debug(data)
+
+        if response.status != 200:
+            raise exception.AssociateAddressFailed()
 
         ## TODO(tr3buchet): currently network_info doesn't contain floating IPs
         ## in its info, if this changes, the next few lines will need to

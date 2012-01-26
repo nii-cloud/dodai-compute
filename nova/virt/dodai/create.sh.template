@@ -8,21 +8,20 @@ function partition_and_format {
   parted /dev/sda rm 3 > /dev/null 2>&1
   parted /dev/sda rm 4 > /dev/null 2>&1
 
-  total_size_gb=`parted /dev/sda print | grep Disk | cut -f3 -d " " | cut -f1 -d "G"`
+  sda1_end=`expr $root_size \* 1000 `
+  sda2_end=`expr $sda1_end + $swap_size \* 1000`
+  sda3_end=`expr $sda2_end + $ephemeral_size \* 1000`
+  sda4_end=`expr $sda3_end + $kdump_size \* 1000`
 
-  sda1_end=$disk_size
-  sda2_start=`expr $sda1_end + 1`
-  sda2_end=`expr $sda2_start + 2048`
-  sda3_start=`expr $sda2_end + 1`
-  sda3_end=`expr $sda3_end + $total_size_gb \* 1024 - $sda2_end`
-
-  parted /dev/sda mkpart primary 1 $sda1_end 
-  parted /dev/sda mkpartfs primary linux-swap $sda2_start $sda2_end
-  parted /dev/sda mkpart primary $sda3_start $sda3_end
+  parted /dev/sda mkpart primary 2 $sda1_end 
+  parted /dev/sda mkpartfs primary linux-swap $sda1_end $sda2_end
+  parted /dev/sda mkpart primary $sda2_end $sda3_end
+  parted /dev/sda mkpart primary $sda3_end $sda4_end
   parted /dev/sda set 1 boot on
 
-  mkfs.ext4 /dev/sda1 -q
-  mkfs.ext4 /dev/sda3 -q
+  sleep 5
+
+  mkfs.ext4 /dev/sda3
   parted /dev/sda print
 }
 
@@ -34,14 +33,44 @@ function copy_fs {
   mkdir /mnt/image
   mount -o loop -t ext4 /mnt/sda3/image /mnt/image
 
+  if [[ -n `file /mnt/sda3/image | grep -i ext3` ]]; then
+     MKFS="mkfs.ext3"
+  elif [[ -n `file /mnt/sda3/image | grep -i ext4` ]]; then
+     MKFS="mkfs.ext4"
+  else
+     MKFS="mkfs.ext3"
+  fi
+  $MKFS /dev/sda1
+
   mkdir /mnt/sda1
   mount /dev/sda1 /mnt/sda1
 
-  rsync -PavHS /mnt/image/ /mnt/sda1
+  rsync -PavHS /mnt/image/ /mnt/sda1 > /dev/null
+
+  if [[ -n `grep '/mnt' /mnt/sda1/etc/fstab | grep ext3` ]]; then
+     MKFS="mkfs.ext3"
+  elif [[ -n `grep '/mnt' /mnt/sda1/etc/fstab | grep ext4` ]]; then
+     MKFS="mkfs.ext4"
+  else
+     MKFS="mkfs.ext3"
+  fi
+
+  umount /mnt/sda3/image
+  umount /mnt/sda3
+  $MKFS /dev/sda3
 }
 
 function set_hostname {
-  echo "$instance_id" > /mnt/sda1/etc/hostname
+  echo "$host_name" > /mnt/sda1/etc/hostname
+}
+
+function create_files {
+  mkdir /mnt/sda1/etc/dodai
+  echo "wget http://$cobbler:$monitor_port/$instance_id/installed -q" > /mnt/sda1/etc/dodai/update_state
+  echo $pxe_ip > /mnt/sda1/etc/dodai/pxe_ip
+  echo $pxe_mac > /mnt/sda1/etc/dodai/pxe_mac
+  echo $storage_ip > /mnt/sda1/etc/dodai/storage_ip
+  echo $storage_mac > /mnt/sda1/etc/dodai/storage_mac
 }
 
 function grub_install {
@@ -50,14 +79,32 @@ function grub_install {
   chroot /mnt/sda1 grub-install /dev/sda
 }
 
+function notify {
+  wget http://$cobbler:$monitor_port/$instance_id/$1 -q
+}
+
 cobbler=COBBLER
+host_name=HOST_NAME
 instance_id=INSTANCE_ID
-disk_size=DISK_SIZE
+storage_ip=STORAGE_IP
+storage_mac=STORAGE_MAC
+pxe_ip=PXE_IP
+pxe_mac=PXE_MAC
+monitor_port=MONITOR_PORT
+root_size=ROOT_SIZE
+swap_size=SWAP_SIZE
+ephemeral_size=EPHEMERAL_SIZE
+kdump_size=KDUMP_SIZE
+
+notify "install"
 
 partition_and_format
 copy_fs
 set_hostname
+create_files
 grub_install
+
+notify "install_reboot"
 
 echo "Initialization finished."
 

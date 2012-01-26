@@ -1291,7 +1291,8 @@ class CloudController(object):
             self._format_instance_bdm(context, instance_id,
                                       i['rootDeviceName'], i)
             host = instance['host']
-            zone = self._get_availability_zone_by_host(context, host)
+            #zone = self._get_availability_zone_by_host(context, host)
+            zone = instance['availability_zone']
             i['placement'] = {'availabilityZone': zone}
             if instance['reservation_id'] not in reservations:
                 r = {}
@@ -1384,6 +1385,7 @@ class CloudController(object):
         if image_state != 'available':
             raise exception.ApiError(_('Image must be available'))
 
+        LOG.debug(kwargs)
         instances = self.compute_api.create(context,
             instance_type=instance_types.get_instance_type_by_name(
                 kwargs.get('instance_type', None)),
@@ -1398,7 +1400,7 @@ class CloudController(object):
             user_data=kwargs.get('user_data'),
             security_group=kwargs.get('security_group'),
             availability_zone=kwargs.get('placement', {}).get(
-                                  'AvailabilityZone'),
+                                  'availability_zone'),
             block_device_mapping=kwargs.get('block_device_mapping', {}))
         return self._format_run_instances(context,
                 reservation_id=instances[0]['reservation_id'])

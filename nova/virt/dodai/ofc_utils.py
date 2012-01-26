@@ -4,13 +4,13 @@ from nova import db
 
 import logging
 
-logging.getLogger('suds.client').setLevel(logging.CRITICAL)
+logging.getLogger('suds.client').setLevel(logging.INFO)
 
 def update_for_run_instance(service_url, region_name, server_port1, server_port2, dpid1, dpid2, vlan_id, create_region):
     # check region name
     client = Client(service_url + "?wsdl")
 
-    if region_name not in client.service.showRegion():
+    if region_name not in [x.regionName for x in client.service.showRegion()]:
        if not create_region:
            raise exception.OFCRegionNotFound(region_name)
 

@@ -1,5 +1,5 @@
 DEFAULT pxeboot
-TIMEOUT 20
+TIMEOUT 1 
 PROMPT 0
 LABEL pxeboot
         LOCALBOOT -1
