@@ -1,0 +1,15 @@
+#!/bin/bash
+
+cd `dirname $0`
+
+echo "Schema of table bare_metal_machines"
+mysql -uroot -pnova dodai -e "show columns from bare_metal_machines;"
+
+echo "Schema of table switches"
+mysql -uroot -pnova dodai -e "show columns from switches;"
+
+echo "Contents of table bare_metal_machines"
+nova-manage dodai_machine list
+
+echo "Contents of table switches"
+nova-manage dodai_switch list

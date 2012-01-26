@@ -1,4 +1,8 @@
-bin/nova-manage dodai_machine create --instance_type=m1.tiny --ipmi_ip=192.168.10.135 --pxe_mac=default --server_port1=10 --server_port2=11 --dpid1=0000000000000001 --dpid2=0000000000000002
-bin/nova-manage dodai_switch create --dpid=0000000000000001 --outer_port=1
-bin/nova-manage dodai_switch create --dpid=0000000000000001 --outer_port=2
-bin/nova-manage dodai_switch create --dpid=0000000000000002 --outer_port=1
+#!/bin/bash
+
+cd `dirname $0`
+./nova-manage dodai_machine create --instance_type=m1.tiny --name=cn0000001  --ipmi_ip=192.168.10.135 --pxe_ip=192.168.30.135 --pxe_mac=00:26:6c:fe:19:8b --storage_ip="" --storage_mac="" --server_port1=10 --server_port2=11 --dpid1=0000000000000001 --dpid2=0000000000000002 --service_mac1=00:00:00:00:00:00 --service_mac2=00:00:00:00:00:00
+
+./nova-manage dodai_switch create --dpid=0000000000000001 --outer_port=1
+./nova-manage dodai_switch create --dpid=0000000000000001 --outer_port=2
+./nova-manage dodai_switch create --dpid=0000000000000002 --outer_port=1

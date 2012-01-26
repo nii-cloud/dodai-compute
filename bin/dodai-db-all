@@ -1,0 +1,9 @@
+#!/bin/bash
+
+cd `dirname $0`
+
+./dodai-db-drop
+./dodai-db-create
+./nova-manage dodai_db sync
+./dodai-db-init
+./dodai-db-show
