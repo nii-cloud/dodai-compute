@@ -503,6 +503,7 @@ class ComputeManager(manager.SchedulerDependentManager):
         #    self.db.instance_destroy(context, instance_id)
         #    raise exception.Error(_('trying to destroy already destroyed'
         #                            ' instance: %s') % instance_id)
+
         return self.driver.destroy(context, instance, network_info)
 
         #if action_str == 'Terminating':
@@ -513,6 +514,12 @@ class ComputeManager(manager.SchedulerDependentManager):
     def terminate_instance(self, context, instance_id):
         """Terminate an instance on this host."""
         def _inner_terminate_instance():
+            self._instance_update(context,
+                                  instance_id,
+                                  vm_state=vm_states.DELETED,
+                                  task_state=None,
+                                  terminated_at=utils.utcnow())
+
             bmm = self._shutdown_instance(context, instance_id, 'Terminating')
             instance = self.db.instance_get(context.elevated(), instance_id)
             instance_new = db.instance_create(context, 
@@ -525,12 +532,6 @@ class ComputeManager(manager.SchedulerDependentManager):
                  "instance_type_id": instance["instance_type_id"],
                  "vm_state": vm_states.BUILDING,
                  "image_ref": FLAGS.dodai_default_image})
-
-            self._instance_update(context,
-                                  instance_id,
-                                  vm_state=vm_states.DELETED,
-                                  task_state=None,
-                                  terminated_at=utils.utcnow())
 
             self.db.instance_destroy(context, instance_id)
     
