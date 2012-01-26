@@ -22,6 +22,7 @@ A dodai hypervisor.
 
 """
 import os
+import os.path
 import tempfile
 
 from nova import exception
@@ -343,6 +344,10 @@ class DodaiConnection(driver.ComputeDriver):
         f = open(utils.abspath("virt/dodai/" + template_name + ".template"), "r")
         content = f.read()
         f.close()
+
+        path = os.path.dirname(dest_path)
+        if not os.path.exists(path):
+           os.makedirs(path) 
 
         for key, value in params.iteritems():
             content = content.replace(key, str(value))
