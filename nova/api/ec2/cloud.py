@@ -1225,6 +1225,8 @@ class CloudController(object):
         #               were handed to it
         reservations = {}
         # NOTE(vish): instance_id is an optional list of ids to filter by
+
+
         if instance_id:
             instances = []
             for ec2_id in instance_id:
@@ -1258,16 +1260,25 @@ class CloudController(object):
                 'name': state_description_from_vm_state(instance['vm_state'])}
             fixed_addr = None
             floating_addr = None
-            if instance['fixed_ips']:
-                fixed = instance['fixed_ips'][0]
-                fixed_addr = fixed['address']
-                if fixed['floating_ips']:
-                    floating_addr = fixed['floating_ips'][0]['address']
-                if fixed['network'] and use_v6:
-                    i['dnsNameV6'] = ipv6.to_global(
-                        fixed['network']['cidr_v6'],
-                        fixed['virtual_interface']['address'],
-                        instance['project_id'])
+            #if instance['fixed_ips']:
+            #    fixed = instance['fixed_ips'][0]
+            #    fixed_addr = fixed['address']
+            #    if fixed['floating_ips']:
+            #        floating_addr = fixed['floating_ips'][0]['address']
+            #    if fixed['network'] and use_v6:
+            #        i['dnsNameV6'] = ipv6.to_global(
+            #            fixed['network']['cidr_v6'],
+            #            fixed['virtual_interface']['address'],
+            #            instance['project_id'])
+
+            try:
+                bmm = db.bmm_get_by_instance_id(context, instance_id)
+                floating_addr = bmm["service_ip"]
+                fixed_addr = bmm["storage_ip"]
+                LOG.debug("Floating address: " + floating_addr)
+                LOG.debug("Fixed address: " + fixed_addr)
+            except:
+                pass
 
             i['privateDnsName'] = fixed_addr
             i['privateIpAddress'] = fixed_addr

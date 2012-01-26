@@ -1409,17 +1409,23 @@ class API(base.Base):
         """
         instance = self.get(context, instance_id)
         ip, netmask, gw, dns = address.split(",")
-        bmm = db.bmm_get_by_instance_id(instance_id)
+        bmm = db.bmm_get_by_instance_id(context, instance_id)
 
-        conn = httplib.HTTPConnection(bmm["pxe_ip"])
-        params = urllib.urlencode({'ip_address': ip, 
-                                   'subnet_mask': netmask, 
-                                   'default_gateway': gw, 
-                                   'dns': dns,
-                                   'mac_address[0]': bmm["service_mac1"],
-                                   'mac_address[1]': bmm["service_mac2"]})
+        conn = httplib.HTTPConnection(bmm["pxe_ip"], "4567")
+        params = {'ip_address': ip, 
+                  'subnet_mask': netmask, 
+                  'default_gateway': gw, 
+                  'dns': dns}
+        index = 0
+        if bmm["service_mac1"]:
+            params["mac_address[%d]" % index] = bmm["service_mac1"]
+            index += 1
+        if bmm["service_mac2"]:
+            params["mac_address[%d]" % index] = bmm["service_mac2"]
+
+        params = urllib.urlencode(params)
         headers = {'Content-type': 'application/x-www-form-urlencoded', 'Accept': 'text/plain'}
-        conn.request("PUT", "services/dodai-instance/networks.json", params, headers)
+        conn.request("PUT", "/services/dodai-instance/networks.json", params, headers)
         response = conn.getresponse()
         data = response.read()
         LOG.debug(response.status)
@@ -1428,6 +1434,8 @@ class API(base.Base):
 
         if response.status != 200:
             raise exception.AssociateAddressFailed()
+
+        db.bmm_update(context, bmm["id"], {"service_ip": ip})
 
         ## TODO(tr3buchet): currently network_info doesn't contain floating IPs
         ## in its info, if this changes, the next few lines will need to

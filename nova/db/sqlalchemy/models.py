@@ -875,6 +875,7 @@ class BareMetalMachine(BASE, NovaBase):
     pxe_mac = Column(String(255))
     storage_ip = Column(String(255))
     storage_mac = Column(String(255))
+    service_ip = Column(String(255))
     service_mac1 = Column(String(255))
     service_mac2 = Column(String(255))
     server_port1 = Column(Integer())
