@@ -535,6 +535,7 @@ class ComputeManager(manager.SchedulerDependentManager):
                  "host": instance["host"],
                  "display_name": instance["display_name"],
                  "instance_type_id": instance["instance_type_id"],
+                 "vcpus": instance["vcpus"],
                  "vm_state": vm_states.BUILDING,
                  "image_ref": FLAGS.dodai_default_image})
 
