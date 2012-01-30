@@ -202,6 +202,7 @@ class DodaiConnection(driver.ComputeDriver):
         return instance_zone, cluster_name, vlan_id, create_cluster
 
     def _install_machine(self, context, instance, bmm, cluster_name, vlan_id, update_instance=False):
+        db.bmm_update(context, bmm["id"], {"status": "processing", "instance_id": instance["id"]})
         mac = self._get_pxe_mac(bmm)
 
         # fetch image
@@ -258,8 +259,8 @@ class DodaiConnection(driver.ComputeDriver):
 
         db.bmm_update(context, bmm["id"], 
                                {"availability_zone": cluster_name,
-                                "instance_id": instance["id"],
                                 "vlan_id": vlan_id,
+                                "service_ip": None,
                                 "status": status})
 
         if update_instance:
@@ -308,12 +309,10 @@ class DodaiConnection(driver.ComputeDriver):
             LOG.debug(bmm["status"])
             instance_ref = db.instance_get(context, bmm["instance_id"])
             if instance_ref["image_ref"] == instance["image_ref"]:
-                db.bmm_update(context, bmm["id"], {"status": "processing"})
                 return bmm
 
         for bmm in db.bmm_get_all_by_instance_type(context, inst_type["name"]):
             if bmm["status"] != "used" and bmm["status"] != "processing":
-                db.bmm_update(context, bmm["id"], {"status": "processing"})
                 return bmm
 
         raise exception.BareMetalMachineUnavailable()  
