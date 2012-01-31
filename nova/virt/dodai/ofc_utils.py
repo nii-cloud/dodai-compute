@@ -19,6 +19,9 @@ def update_for_run_instance(service_url, region_name, server_port1, server_port2
        switches = db.switch_get_all(None)
        for switch in switches:
            client.service.setOuterPortAssociationSetting(switch["dpid"], switch["outer_port"], vlan_id, 65535, region_name)
+    else:
+        if create_region:
+            raise exception.OFCRegionExisted(region_name)
 
     client.service.setServerPort(dpid1, server_port1, region_name)
     client.service.setServerPort(dpid2, server_port2, region_name)

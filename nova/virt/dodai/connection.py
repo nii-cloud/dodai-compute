@@ -46,17 +46,15 @@ flags.DEFINE_string('cobbler', None, 'IP address of cobbler')
 flags.DEFINE_string('cobbler_path', '/var/www/cobbler', 'Path of cobbler')
 flags.DEFINE_string('pxe_boot_path', '/var/lib/tftpboot/pxelinux.cfg', 'Path of pxeboot folder')
 flags.DEFINE_string('ofc_service_url', None, 'URL of open flow controller service.')
-flags.DEFINE_integer('bmm_port', 3333, '')
-flags.DEFINE_string('bmm_status_path', "status", '')
-flags.DEFINE_string('bmm_action_path', "action", '')
 flags.DEFINE_string('ipmi_username', "", '')
 flags.DEFINE_string('ipmi_password', "", '')
-flags.DEFINE_integer('dodai_default_image', 13, '')
+flags.DEFINE_integer('dodai_default_image', 1, '')
 flags.DEFINE_integer('dodai_monitor_port', 7070, '')
 flags.DEFINE_integer('dodai_partition_root_gb', 10, '')
 flags.DEFINE_integer('dodai_partition_swap_gb', 2, '')
 flags.DEFINE_integer('dodai_partition_ephemeral_gb', 10, '')
 flags.DEFINE_integer('dodai_partition_kdump_gb', 10, '')
+flags.DEFINE_string('service_network', '192.168.30.0', '')
 
 def get_connection(_):
     # The read_only parameter is ignored.
@@ -163,7 +161,7 @@ class DodaiConnection(driver.ComputeDriver):
         instance_zone, cluster_name, vlan_id, create_cluster = self._parse_zone(instance["availability_zone"])
 
         # update instances table
-        bmm = self._get_a_bare_metal_machine(context, instance)
+        bmm, reuse = self._get_a_bare_metal_machine(context, instance)
         instance["display_name"] = bmm["name"]
         instance["availability_zone"] = instance_zone
         db.instance_update(context, 
@@ -174,11 +172,11 @@ class DodaiConnection(driver.ComputeDriver):
         if instance_zone == "resource_pool":
             self._install_machine(context, instance, bmm, cluster_name, vlan_id)
         else: 
-            if bmm["availability_zone"] == "resource_pool" and bmm["status"] == "active":
+            if reuse:
                 db.instance_destroy(context, bmm["instance_id"])
                 db.bmm_update(context, bmm["id"], {"availability_zone": cluster_name, 
-                                          "status": "used", 
-                                          "instance_id": instance["id"]}) 
+                                                   "status": "used", 
+                                                   "instance_id": instance["id"]}) 
                 self._update_ofc(bmm, cluster_name, vlan_id, create_cluster)
             else:
                 self._install_machine(context, instance, bmm, cluster_name, vlan_id)
@@ -208,12 +206,17 @@ class DodaiConnection(driver.ComputeDriver):
         # fetch image
         utils.execute('mkdir', '-p', self._get_cobbler_path(instance))
         image_path = self._get_cobbler_path(instance, "disk")
-        images.fetch(context, 
+        image_meta = images.fetch(context, 
                      instance["image_ref"], 
                      image_path, 
                      instance["user_id"], 
                      instance["project_id"])
- 
+        LOG.debug(image_meta) 
+        image_type = "server"
+        image_name = image_meta["name"] or image_meta["properties"]["image_location"]
+        if image_name.find("dodai-deploy") == -1:
+            image_type = "node"
+
         # begin to install os
         pxe_ip = bmm["pxe_ip"] or "None"
         pxe_mac = bmm["pxe_mac"] or "None"
@@ -229,6 +232,8 @@ class DodaiConnection(driver.ComputeDriver):
                            "STORAGE_MAC": storage_mac,
                            "PXE_IP": pxe_ip, 
                            "PXE_MAC": pxe_mac,
+                           "IMAGE_TYPE": image_type,
+                           "NETWORK": FLAGS.service_network,
                            "MONITOR_PORT": FLAGS.dodai_monitor_port,
                            "ROOT_SIZE": FLAGS.dodai_partition_root_gb,
                            "SWAP_SIZE": FLAGS.dodai_partition_swap_gb,
@@ -309,11 +314,11 @@ class DodaiConnection(driver.ComputeDriver):
             LOG.debug(bmm["status"])
             instance_ref = db.instance_get(context, bmm["instance_id"])
             if instance_ref["image_ref"] == instance["image_ref"]:
-                return bmm
+                return bmm, True
 
         for bmm in db.bmm_get_all_by_instance_type(context, inst_type["name"]):
             if bmm["status"] != "used" and bmm["status"] != "processing":
-                return bmm
+                return bmm, False
 
         raise exception.BareMetalMachineUnavailable()  
 
@@ -486,15 +491,3 @@ class PowerManager(object):
     def _execute(self, subcommand):
         out, err = utils.execute("/usr/bin/ipmitool", "-I", "lan", "-H", self.ip, "-U", FLAGS.ipmi_username, "-P", FLAGS.ipmi_password, "chassis", "power", subcommand)
         return out
-
-class BmmService(object):
-
-    @staticmethod
-    def is_listening(ip):
-        try:
-            conn = httplib.HTTPConnection(ip, FLAGS.bmm_port)
-            conn.close()
-        except:
-            return False
-
-        return True

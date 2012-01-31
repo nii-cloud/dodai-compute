@@ -859,3 +859,6 @@ class SwitchNotFound(NotFound):
 
 class OFCRegionNotFound(NotFound):
     message = _("Region %(region_name)s of open flow controller could not be found.")
+
+class OFCRegionExisted(NovaException):
+    message = _("Region %(region_name)s of open flow controller has existed.")

@@ -62,6 +62,7 @@ function copy_fs {
 
 function set_hostname {
   echo "$host_name" > /mnt/sda1/etc/hostname
+  sed -i -e "s/HOST/$host_name/" /mnt/sda1/etc/hosts
 }
 
 function create_files {
@@ -71,6 +72,9 @@ function create_files {
   echo $pxe_mac > /mnt/sda1/etc/dodai/pxe_mac
   echo $storage_ip > /mnt/sda1/etc/dodai/storage_ip
   echo $storage_mac > /mnt/sda1/etc/dodai/storage_mac
+
+  chmod +x /mnt/sda1/usr/local/src/dodai-deploy/others/auto_register_node/setup.sh
+  /mnt/sda1/usr/local/src/dodai-deploy/others/auto_register_node/setup.sh /mnt/sda1 $image_type $network
 }
 
 function grub_install {
@@ -95,6 +99,8 @@ root_size=ROOT_SIZE
 swap_size=SWAP_SIZE
 ephemeral_size=EPHEMERAL_SIZE
 kdump_size=KDUMP_SIZE
+image_type=IMAGE_TYPE
+network=NETWORK
 
 notify "install"
 
