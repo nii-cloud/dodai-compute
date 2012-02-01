@@ -874,3 +874,6 @@ class OFCRegionNotFound(RunInstancesFailed):
 
 class OFCRegionExisted(RunInstancesFailed):
     message = _("Region %(region_name)s of open flow controller has existed.")
+
+class NotEnoughMachines(RunInstancesFailed):
+    message = _("%(max_count)d machines were requested, but only %(available_count)d machines are available.")

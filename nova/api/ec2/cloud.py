@@ -1420,6 +1420,18 @@ class CloudController(object):
 
         _validate_zone(zone)
 
+        def _validate_max_count(max_count):
+            bmms = db.bmm_get_all_by_instance_type(context, kwargs.get("instance_type", None))
+            available_count = 0
+            for bmm in bmms:
+                if bmm["status"] == "inactive" or bmm["status"] == "active":
+                    available_count += 1
+
+            if available_count < max_count:
+                raise exception.NotEnoughMachines(max_count=max_count, available_count=available_count)
+
+        _validate_max_count(max_count)
+
         LOG.debug(kwargs)
         instances = self.compute_api.create(context,
             instance_type=instance_types.get_instance_type_by_name(
