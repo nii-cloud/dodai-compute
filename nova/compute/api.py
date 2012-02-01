@@ -1407,8 +1407,31 @@ class API(base.Base):
 
         :param address: is a string floating ip address
         """
+        parts = address.split(",")
+        if len(parts) != 4:
+            raise exception.WrongAddress(address=address) 
+
+        ip, netmask, gw, dns = parts
+        def _validate_ip(ip):
+            parts = ip.split(".")
+            if len(parts) != 4:
+                raise exception.WrongIPFormat(ip=ip)
+
+            for part in parts:
+                try:
+                    part_int = int(part)
+                except ValueError:
+                    raise exception.WrongIPFormat(ip=ip) 
+
+                if part_int < 0 or part_int > 255:
+                    raise exception.WrongIPFormat(ip=ip) 
+
+        _validate_ip(ip)
+        _validate_ip(netmask)
+        _validate_ip(gw)
+        _validate_ip(dns)
+
         instance = self.get(context, instance_id)
-        ip, netmask, gw, dns = address.split(",")
         bmm = db.bmm_get_by_instance_id(context, instance_id)
 
         conn = httplib.HTTPConnection(bmm["pxe_ip"], "4567")

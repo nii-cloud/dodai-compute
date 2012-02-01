@@ -839,9 +839,6 @@ class InsufficientFreeMemory(NovaException):
 class BareMetalMachineUnavailable(NovaException):
     message = _("Bare Metal Machine is unavailable.")
 
-class AssociateAddressFailed(NovaException):
-    message = _("Assoicating addresss failed.")
-
 class BareMetalMachineNotFound(NotFound):
     message = _("Bare Metal Machine %(id)d could not be found.")
 
@@ -862,3 +859,12 @@ class OFCRegionNotFound(NotFound):
 
 class OFCRegionExisted(NovaException):
     message = _("Region %(region_name)s of open flow controller has existed.")
+
+class AssociateAddressFailed(NovaException):
+    message = _("Assoicating addresss failed.")
+
+class WrongIPFormat(AssociateAddressFailed):
+    message = _("The format of IP address '%(ip)s' is wrong.")
+
+class WrongAddress(AssociateAddressFailed):
+    message = _("The address '%(address)s' is wrong. The format should be 'ip,netmask,gateway,dns'")
