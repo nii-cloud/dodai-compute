@@ -4,7 +4,7 @@ from nova import db
 
 import logging
 
-logging.getLogger('suds.client').setLevel(logging.INFO)
+logging.getLogger('suds').setLevel(logging.INFO)
 
 def update_for_run_instance(service_url, region_name, server_port1, server_port2, dpid1, dpid2, vlan_id, create_region):
     # check region name
@@ -40,3 +40,7 @@ def update_for_terminate_instance(service_url, region_name, server_port1, server
         client.service.clearOuterPortAssociationSetting(switch["dpid"], switch["outer_port"], vlan_id)
     client.service.destroyRegion(region_name)
     client.service.save()
+
+def has_region(service_url, region_name):
+    client = Client(service_url + "?wsdl")
+    return region_name in [x.regionName for x in client.service.showRegion()]

@@ -854,17 +854,23 @@ class BareMetalMachineNotFoundByInstanceId(NotFound):
 class SwitchNotFound(NotFound):
     message = _("Switch %(id)d could not be found.")
 
-class OFCRegionNotFound(NotFound):
-    message = _("Region %(region_name)s of open flow controller could not be found.")
-
-class OFCRegionExisted(NovaException):
-    message = _("Region %(region_name)s of open flow controller has existed.")
-
 class AssociateAddressFailed(NovaException):
     message = _("Assoicating addresss failed.")
+
+class RunInstancesFailed(NovaException):
+    message = _("Running instances failed.")
 
 class WrongIPFormat(AssociateAddressFailed):
     message = _("The format of IP address '%(ip)s' is wrong.")
 
 class WrongAddress(AssociateAddressFailed):
     message = _("The address '%(address)s' is wrong. The format should be 'ip,netmask,gateway,dns'")
+
+class WrongCluster(RunInstancesFailed):
+    message = _("The cluster '%(cluster)s' is wrong. The format should be '[C,]cluster_name,vlan_id'")
+
+class OFCRegionNotFound(RunInstancesFailed):
+    message = _("Region %(region_name)s of open flow controller could not be found.")
+
+class OFCRegionExisted(RunInstancesFailed):
+    message = _("Region %(region_name)s of open flow controller has existed.")

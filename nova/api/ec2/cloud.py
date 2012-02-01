@@ -49,7 +49,7 @@ from nova.api.ec2 import ec2utils
 from nova.compute import instance_types
 from nova.compute import vm_states
 from nova.image import s3
-
+from nova.virt.dodai import ofc_utils
 
 FLAGS = flags.FLAGS
 flags.DECLARE('dhcp_domain', 'nova.network.manager')
@@ -1395,6 +1395,30 @@ class CloudController(object):
 
         if image_state != 'available':
             raise exception.ApiError(_('Image must be available'))
+
+        zone = kwargs.get('placement').get('availability_zone')
+        def _validate_zone(zone):
+            parts = zone.split(",")
+            if len(parts) < 2 or len(parts) > 3:
+                raise exception.WrongCluster(cluster=zone)
+
+            if len(parts) == 3 and parts[0] != "C":
+                raise exception.WrongCluster(cluster=zone)
+
+            create_cluster = False
+            if len(parts) == 3:
+                create_cluster = True
+                parts.pop(0)
+
+            cluster_name, vlan_id = parts 
+            has_cluster = ofc_utils.has_region(FLAGS.ofc_service_url, cluster_name)
+            if create_cluster and has_cluster:
+                raise exception.OFCRegionExisted(region_name=cluster_name)
+
+            if not create_cluster and not has_cluster:
+                raise exception.OFCRegionNotFound(region_name=cluster_name)
+
+        _validate_zone(zone)
 
         LOG.debug(kwargs)
         instances = self.compute_api.create(context,

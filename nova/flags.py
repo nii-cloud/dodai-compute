@@ -427,3 +427,17 @@ DEFINE_list('monkey_patch_modules',
         'nova.compute.api:nova.notifier.api.notify_decorator'],
         'Module list representing monkey '
         'patched module and decorator')
+
+DEFINE_string('cobbler', None, 'IP address of cobbler')
+DEFINE_string('cobbler_path', '/var/www/cobbler', 'Path of cobbler')
+DEFINE_string('pxe_boot_path', '/var/lib/tftpboot/pxelinux.cfg', 'Path of pxeboot folder')
+DEFINE_string('ofc_service_url', None, 'URL of open flow controller service.')
+DEFINE_string('ipmi_username', "", '')
+DEFINE_string('ipmi_password', "", '')
+DEFINE_integer('dodai_default_image', 1, '')
+DEFINE_integer('dodai_monitor_port', 7070, '')
+DEFINE_integer('dodai_partition_root_gb', 10, '')
+DEFINE_integer('dodai_partition_swap_gb', 2, '')
+DEFINE_integer('dodai_partition_ephemeral_gb', 10, '')
+DEFINE_integer('dodai_partition_kdump_gb', 10, '')
+DEFINE_string('service_network', '192.168.30.0', '')

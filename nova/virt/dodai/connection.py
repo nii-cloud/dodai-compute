@@ -42,20 +42,6 @@ from eventlet import greenthread
 LOG = logging.getLogger('nova.virt.dodai')
 FLAGS = flags.FLAGS
 
-flags.DEFINE_string('cobbler', None, 'IP address of cobbler')
-flags.DEFINE_string('cobbler_path', '/var/www/cobbler', 'Path of cobbler')
-flags.DEFINE_string('pxe_boot_path', '/var/lib/tftpboot/pxelinux.cfg', 'Path of pxeboot folder')
-flags.DEFINE_string('ofc_service_url', None, 'URL of open flow controller service.')
-flags.DEFINE_string('ipmi_username', "", '')
-flags.DEFINE_string('ipmi_password', "", '')
-flags.DEFINE_integer('dodai_default_image', 1, '')
-flags.DEFINE_integer('dodai_monitor_port', 7070, '')
-flags.DEFINE_integer('dodai_partition_root_gb', 10, '')
-flags.DEFINE_integer('dodai_partition_swap_gb', 2, '')
-flags.DEFINE_integer('dodai_partition_ephemeral_gb', 10, '')
-flags.DEFINE_integer('dodai_partition_kdump_gb', 10, '')
-flags.DEFINE_string('service_network', '192.168.30.0', '')
-
 def get_connection(_):
     # The read_only parameter is ignored.
     return DodaiConnection.instance()
