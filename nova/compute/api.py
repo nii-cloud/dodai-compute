@@ -1407,6 +1407,7 @@ class API(base.Base):
 
         :param address: is a string floating ip address
         """
+        address = str(address)
         parts = address.split(",")
         if len(parts) != 4:
             raise exception.WrongAddress(address=address) 
