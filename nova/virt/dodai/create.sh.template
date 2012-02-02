@@ -74,7 +74,7 @@ function create_files {
   echo $storage_mac > /mnt/sda1/etc/dodai/storage_mac
 
   chmod +x /mnt/sda1/usr/local/src/dodai-deploy/others/auto_register_node/setup.sh
-  /mnt/sda1/usr/local/src/dodai-deploy/others/auto_register_node/setup.sh /mnt/sda1 $image_type $network
+  /mnt/sda1/usr/local/src/dodai-deploy/others/auto_register_node/setup.sh /mnt/sda1 $image_type
 }
 
 function grub_install {
@@ -100,7 +100,6 @@ swap_size=SWAP_SIZE
 ephemeral_size=EPHEMERAL_SIZE
 kdump_size=KDUMP_SIZE
 image_type=IMAGE_TYPE
-network=NETWORK
 
 notify "install"
 

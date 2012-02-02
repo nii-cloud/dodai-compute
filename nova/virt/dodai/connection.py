@@ -219,7 +219,6 @@ class DodaiConnection(driver.ComputeDriver):
                            "PXE_IP": pxe_ip, 
                            "PXE_MAC": pxe_mac,
                            "IMAGE_TYPE": image_type,
-                           "NETWORK": FLAGS.service_network,
                            "MONITOR_PORT": FLAGS.dodai_monitor_port,
                            "ROOT_SIZE": FLAGS.dodai_partition_root_gb,
                            "SWAP_SIZE": FLAGS.dodai_partition_swap_gb,
