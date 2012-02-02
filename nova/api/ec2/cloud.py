@@ -1398,6 +1398,9 @@ class CloudController(object):
 
         zone = kwargs.get('placement').get('availability_zone')
         def _validate_zone(zone):
+            if zone == "resource_pool":
+                return
+
             parts = zone.split(",")
             if len(parts) < 2 or len(parts) > 3:
                 raise exception.WrongCluster(cluster=zone)

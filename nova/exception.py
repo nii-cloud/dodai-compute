@@ -867,7 +867,7 @@ class WrongAddress(AssociateAddressFailed):
     message = _("The address '%(address)s' is wrong. The format should be 'ip,netmask,gateway,dns'")
 
 class WrongCluster(RunInstancesFailed):
-    message = _("The cluster '%(cluster)s' is wrong. The format should be '[C,]cluster_name,vlan_id'")
+    message = _("The cluster '%(cluster)s' is wrong. The format should be '{[C,]cluster_name,vlan_id | resource_pool'")
 
 class OFCRegionNotFound(RunInstancesFailed):
     message = _("Region %(region_name)s of open flow controller could not be found.")
