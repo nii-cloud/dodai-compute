@@ -44,6 +44,8 @@ from nova.scheduler import api as scheduler_api
 from nova.db import base
 from nova import db
 
+from eventlet import greenthread
+
 LOG = logging.getLogger('nova.compute.api')
 
 
@@ -1432,35 +1434,37 @@ class API(base.Base):
         _validate_ip(gw)
         _validate_ip(dns)
 
-        instance = self.get(context, instance_id)
-        bmm = db.bmm_get_by_instance_id(context, instance_id)
+        def _associate_ip():
+            instance = self.get(context, instance_id)
+            bmm = db.bmm_get_by_instance_id(context, instance_id)
+    
+            conn = httplib.HTTPConnection(bmm["pxe_ip"], "4567")
+            params = {'ip_address': ip, 
+                      'subnet_mask': netmask, 
+                      'default_gateway': gw, 
+                      'dns': dns}
+            index = 0
+            if bmm["service_mac1"]:
+                params["mac_address[%d]" % index] = bmm["service_mac1"]
+                index += 1
+            if bmm["service_mac2"]:
+                params["mac_address[%d]" % index] = bmm["service_mac2"]
+    
+            params = urllib.urlencode(params)
+            headers = {'Content-type': 'application/x-www-form-urlencoded', 'Accept': 'text/plain'}
+            conn.request("PUT", "/services/dodai-instance/networks.json", params, headers)
+            response = conn.getresponse()
+            data = response.read()
+            LOG.debug(response.status)
+            LOG.debug(response.reason)
+            LOG.debug(data)
+    
+            if response.status != 200:
+                raise exception.AssociateAddressFailed()
+    
+            db.bmm_update(context, bmm["id"], {"service_ip": ip})
 
-        conn = httplib.HTTPConnection(bmm["pxe_ip"], "4567")
-        params = {'ip_address': ip, 
-                  'subnet_mask': netmask, 
-                  'default_gateway': gw, 
-                  'dns': dns}
-        index = 0
-        if bmm["service_mac1"]:
-            params["mac_address[%d]" % index] = bmm["service_mac1"]
-            index += 1
-        if bmm["service_mac2"]:
-            params["mac_address[%d]" % index] = bmm["service_mac2"]
-
-        params = urllib.urlencode(params)
-        headers = {'Content-type': 'application/x-www-form-urlencoded', 'Accept': 'text/plain'}
-        conn.request("PUT", "/services/dodai-instance/networks.json", params, headers)
-        response = conn.getresponse()
-        data = response.read()
-        LOG.debug(response.status)
-        LOG.debug(response.reason)
-        LOG.debug(data)
-
-        if response.status != 200:
-            raise exception.AssociateAddressFailed()
-
-        db.bmm_update(context, bmm["id"], {"service_ip": ip})
-
+        greenthread.spawn(_associate_ip)
         ## TODO(tr3buchet): currently network_info doesn't contain floating IPs
         ## in its info, if this changes, the next few lines will need to
         ## accomodate the info containing floating as well as fixed ip addresses
