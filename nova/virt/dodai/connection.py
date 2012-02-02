@@ -158,15 +158,14 @@ class DodaiConnection(driver.ComputeDriver):
         if instance_zone == "resource_pool":
             self._install_machine(context, instance, bmm, cluster_name, vlan_id)
         else: 
+            self._update_ofc(bmm, cluster_name, vlan_id, create_cluster)
             if reuse:
                 db.instance_destroy(context, bmm["instance_id"])
                 db.bmm_update(context, bmm["id"], {"availability_zone": cluster_name, 
                                                    "status": "used", 
                                                    "instance_id": instance["id"]}) 
-                self._update_ofc(bmm, cluster_name, vlan_id, create_cluster)
             else:
                 self._install_machine(context, instance, bmm, cluster_name, vlan_id)
-                self._update_ofc(bmm, cluster_name, vlan_id, create_cluster)
 
     def _parse_zone(self, zone):
         create_cluster = False
