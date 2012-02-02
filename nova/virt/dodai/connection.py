@@ -159,8 +159,10 @@ class DodaiConnection(driver.ComputeDriver):
             self._install_machine(context, instance, bmm, cluster_name, vlan_id)
         else: 
             self._update_ofc(bmm, cluster_name, vlan_id, create_cluster)
-            if reuse:
+            if bmm["instance_id"]:
                 db.instance_destroy(context, bmm["instance_id"])
+
+            if reuse:
                 db.bmm_update(context, bmm["id"], {"availability_zone": cluster_name, 
                                                    "status": "used", 
                                                    "instance_id": instance["id"]}) 
@@ -292,11 +294,13 @@ class DodaiConnection(driver.ComputeDriver):
 
         bmms = db.bmm_get_all_by_instance_type_and_zone(context, inst_type["name"], "resource_pool")
         for bmm in bmms:
+            LOG.debug(bmm["status"])
+            LOG.debug(instance["image_ref"])
             if bmm["status"] != "active":
                 continue 
 
-            LOG.debug(bmm["status"])
             instance_ref = db.instance_get(context, bmm["instance_id"])
+            LOG.debug(instance_ref["image_ref"])
             if instance_ref["image_ref"] == instance["image_ref"]:
                 return bmm, True
 
