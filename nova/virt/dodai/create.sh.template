@@ -1,86 +1,89 @@
 #!/bin/bash
 function partition_and_format {
   parted /dev/sda unit GB
-  parted -s /dev/sda mklabel msdos 
+  parted -s /dev/sda mklabel gpt 
 
-  parted /dev/sda rm 1 > /dev/null 2>&1
-  parted /dev/sda rm 2 > /dev/null 2>&1
-  parted /dev/sda rm 3 > /dev/null 2>&1
-  parted /dev/sda rm 4 > /dev/null 2>&1
+  for i in `seq 5`
+  do
+    parted /dev/sda rm $i > /dev/null 2>&1
+  done
 
-  sda1_end=`expr $root_size \* 1000 `
-  sda2_end=`expr $sda1_end + $swap_size \* 1000`
-  sda3_end=`expr $sda2_end + $ephemeral_size \* 1000`
-  sda4_end=`expr $sda3_end + $kdump_size \* 1000`
+  sda2_end=`expr $root_size \* 1000 `
+  sda3_end=`expr $sda2_end + $swap_size \* 1000`
+  sda4_end=`expr $sda3_end + $ephemeral_size \* 1000`
+  sda5_end=`expr $sda4_end + $kdump_size \* 1000`
 
-  parted /dev/sda mkpart primary 2 $sda1_end 
-  parted /dev/sda mkpartfs primary linux-swap $sda1_end $sda2_end
-  parted /dev/sda mkpart primary $sda2_end $sda3_end
+  parted /dev/sda mkpart primary 0 5
+  parted /dev/sda mkpart primary 5 $sda2_end 
+  parted /dev/sda mkpartfs primary linux-swap $sda2_end $sda3_end
   parted /dev/sda mkpart primary $sda3_end $sda4_end
-  parted /dev/sda set 1 boot on
+  parted /dev/sda mkpart primary $sda4_end $sda5_end
+  parted /dev/sda set 2 boot on
 
   sleep 5
 
-  mkfs.ext4 /dev/sda3
+  mkfs.ext4 /dev/sda4
   parted /dev/sda print
 }
 
 function copy_fs {
-  mkdir /mnt/sda3
-  mount /dev/sda3 /mnt/sda3
+  mkdir /mnt/sda4
+  mount /dev/sda4 /mnt/sda4
 
-  wget -O /mnt/sda3/image http://$cobbler/cobbler/images/$instance_id/disk
+  wget -O /mnt/sda4/image http://$cobbler/cobbler/images/$instance_id/disk
   mkdir /mnt/image
-  mount -o loop -t ext4 /mnt/sda3/image /mnt/image
+  mount -o loop -t ext4 /mnt/sda4/image /mnt/image
 
-  if [[ -n `file /mnt/sda3/image | grep -i ext3` ]]; then
+  if [[ -n `file /mnt/sda4/image | grep -i ext3` ]]; then
      MKFS="mkfs.ext3"
-  elif [[ -n `file /mnt/sda3/image | grep -i ext4` ]]; then
+  elif [[ -n `file /mnt/sda4/image | grep -i ext4` ]]; then
      MKFS="mkfs.ext4"
   else
      MKFS="mkfs.ext3"
   fi
   $MKFS /dev/sda1
+  $MKFS /dev/sda2
 
-  mkdir /mnt/sda1
-  mount /dev/sda1 /mnt/sda1
+  mkdir /mnt/sda2
+  mount /dev/sda2 /mnt/sda2
 
-  rsync -PavHS /mnt/image/ /mnt/sda1 > /dev/null
+  rsync -PavHS /mnt/image/ /mnt/sda2 > /dev/null
 
-  if [[ -n `grep '/mnt' /mnt/sda1/etc/fstab | grep ext3` ]]; then
+  if [[ -n `grep '/mnt' /mnt/sda2/etc/fstab | grep ext3` ]]; then
      MKFS="mkfs.ext3"
-  elif [[ -n `grep '/mnt' /mnt/sda1/etc/fstab | grep ext4` ]]; then
+  elif [[ -n `grep '/mnt' /mnt/sda2/etc/fstab | grep ext4` ]]; then
      MKFS="mkfs.ext4"
   else
      MKFS="mkfs.ext3"
   fi
 
-  umount /mnt/sda3/image
-  umount /mnt/sda3
-  $MKFS /dev/sda3
+  umount /mnt/sda4/image
+  umount /mnt/sda4
+  $MKFS /dev/sda4
 }
 
 function set_hostname {
-  echo "$host_name" > /mnt/sda1/etc/hostname
-  sed -i -e "s/HOST/$host_name/" /mnt/sda1/etc/hosts
+  echo "$host_name" > /mnt/sda2/etc/hostname
+  sed -i -e "s/HOST/$host_name/" /mnt/sda2/etc/hosts
 }
 
 function create_files {
-  mkdir /mnt/sda1/etc/dodai
-  echo "wget http://$cobbler:$monitor_port/$instance_id/installed -q" > /mnt/sda1/etc/dodai/update_state
-  echo $pxe_ip > /mnt/sda1/etc/dodai/pxe_ip
-  echo $pxe_mac > /mnt/sda1/etc/dodai/pxe_mac
-  echo $storage_ip > /mnt/sda1/etc/dodai/storage_ip
-  echo $storage_mac > /mnt/sda1/etc/dodai/storage_mac
+  mkdir /mnt/sda2/etc/dodai
+  echo "wget http://$cobbler:$monitor_port/$instance_id/installed -q" > /mnt/sda2/etc/dodai/update_state
+  echo $pxe_ip > /mnt/sda2/etc/dodai/pxe_ip
+  echo $pxe_mac > /mnt/sda2/etc/dodai/pxe_mac
+  echo $storage_ip > /mnt/sda2/etc/dodai/storage_ip
+  echo $storage_mac > /mnt/sda2/etc/dodai/storage_mac
 
-  chmod +x /mnt/sda1/usr/local/src/dodai-deploy/others/auto_register_node/setup.sh
-  /mnt/sda1/usr/local/src/dodai-deploy/others/auto_register_node/setup.sh /mnt/sda1 $image_type
+  chmod +x /mnt/sda2/usr/local/src/dodai-deploy/others/auto_register_node/setup.sh
+  /mnt/sda2/usr/local/src/dodai-deploy/others/auto_register_node/setup.sh /mnt/sda2 $image_type
 }
 
 function grub_install {
-  mount -o bind /dev/ /mnt/sda1/dev
-  mount -t proc none /mnt/sda1/proc
-  chroot /mnt/sda1 grub-install /dev/sda
+  mount -o bind /dev/ /mnt/sda2/dev
+  mount -t proc none /mnt/sda2/proc
+  chroot /mnt/sda2 parted /dev/sda set bios_grub on
+  chroot /mnt/sda2 grub-install /dev/sda
 }
 
 function notify {
