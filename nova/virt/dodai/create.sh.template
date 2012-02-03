@@ -82,7 +82,7 @@ function create_files {
 function grub_install {
   mount -o bind /dev/ /mnt/sda2/dev
   mount -t proc none /mnt/sda2/proc
-  chroot /mnt/sda2 parted /dev/sda set bios_grub on
+  echo I | chroot /mnt/sda2 parted /dev/sda set 1 bios_grub on
   chroot /mnt/sda2 grub-install /dev/sda
 }
 

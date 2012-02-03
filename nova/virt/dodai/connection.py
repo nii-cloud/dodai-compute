@@ -116,7 +116,7 @@ class DodaiConnection(driver.ComputeDriver):
         info_list = []
         bmms = db.bmm_get_all(None)
         for bmm in bmms:
-            if bmm["status"] != "active":
+            if bmm["status"] != "used":
                 continue
             info_list.append(driver.InstanceInfo(bmm["instance_id"], "running"))
 
