@@ -84,6 +84,7 @@ def _is_able_to_shutdown(instance, instance_id):
 
     valid_shutdown_states = [
         vm_states.ACTIVE,
+        vm_states.STOPPED,
         vm_states.REBUILDING,
         vm_states.BUILDING,
     ]

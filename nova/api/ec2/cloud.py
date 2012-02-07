@@ -1420,8 +1420,8 @@ class CloudController(object):
 
             if not create_cluster and not has_cluster:
                 raise exception.OFCRegionNotFound(region_name=cluster_name)
-
-        _validate_zone(zone)
+            
+            return create_cluster, cluster_name, vlan_id
 
         def _validate_max_count(max_count):
             bmms = db.bmm_get_all_by_instance_type(context, kwargs.get("instance_type", None))
@@ -1434,26 +1434,33 @@ class CloudController(object):
                 raise exception.NotEnoughMachines(max_count=max_count, available_count=available_count)
 
         _validate_max_count(max_count)
+        create_cluster, cluster_name, vlan_id = _validate_zone(zone)
+        if create_cluster:
+            ofc_utils.create_region(FLAGS.ofc_service_url, cluster_name, vlan_id) 
 
-        LOG.debug(kwargs)
-        instances = self.compute_api.create(context,
-            instance_type=instance_types.get_instance_type_by_name(
-                kwargs.get('instance_type', None)),
-            image_href=self._get_image(context, kwargs['image_id'])['id'],
-            min_count=int(kwargs.get('min_count', max_count)),
-            max_count=max_count,
-            kernel_id=kwargs.get('kernel_id'),
-            ramdisk_id=kwargs.get('ramdisk_id'),
-            display_name=kwargs.get('display_name'),
-            display_description=kwargs.get('display_description'),
-            key_name=kwargs.get('key_name'),
-            user_data=kwargs.get('user_data'),
-            security_group=kwargs.get('security_group'),
-            availability_zone=kwargs.get('placement', {}).get(
-                                  'availability_zone'),
-            block_device_mapping=kwargs.get('block_device_mapping', {}))
-        return self._format_run_instances(context,
-                reservation_id=instances[0]['reservation_id'])
+        try:
+            LOG.debug(kwargs)
+            instances = self.compute_api.create(context,
+                instance_type=instance_types.get_instance_type_by_name(
+                    kwargs.get('instance_type', None)),
+                image_href=self._get_image(context, kwargs['image_id'])['id'],
+                min_count=int(kwargs.get('min_count', max_count)),
+                max_count=max_count,
+                kernel_id=kwargs.get('kernel_id'),
+                ramdisk_id=kwargs.get('ramdisk_id'),
+                display_name=kwargs.get('display_name'),
+                display_description=kwargs.get('display_description'),
+                key_name=kwargs.get('key_name'),
+                user_data=kwargs.get('user_data'),
+                security_group=kwargs.get('security_group'),
+                availability_zone=kwargs.get('placement', {}).get(
+                                      'availability_zone'),
+                block_device_mapping=kwargs.get('block_device_mapping', {}))
+            return self._format_run_instances(context,
+                    reservation_id=instances[0]['reservation_id'])
+        except Exception as ex:
+            ofc_utils.delete_region(FLAGS.ofc_service_url, cluster_name, vlan_id)
+            raise ex
 
     def _do_instance(self, action, context, ec2_id):
         instance_id = ec2utils.ec2_id_to_id(ec2_id)

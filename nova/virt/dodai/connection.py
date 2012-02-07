@@ -158,7 +158,7 @@ class DodaiConnection(driver.ComputeDriver):
         if instance_zone == "resource_pool":
             self._install_machine(context, instance, bmm, cluster_name, vlan_id)
         else: 
-            self._update_ofc(bmm, cluster_name, vlan_id, create_cluster)
+            self._update_ofc(bmm, cluster_name)
             if bmm["instance_id"]:
                 db.instance_destroy(context, bmm["instance_id"])
 
@@ -187,17 +187,24 @@ class DodaiConnection(driver.ComputeDriver):
         return instance_zone, cluster_name, vlan_id, create_cluster
 
     def _install_machine(self, context, instance, bmm, cluster_name, vlan_id, update_instance=False):
-        db.bmm_update(context, bmm["id"], {"status": "processing", "instance_id": instance["id"]})
+        db.bmm_update(context, bmm["id"], {"instance_id": instance["id"]})
         mac = self._get_pxe_mac(bmm)
 
         # fetch image
-        utils.execute('mkdir', '-p', self._get_cobbler_path(instance))
-        image_path = self._get_cobbler_path(instance, "disk")
-        image_meta = images.fetch(context, 
-                     instance["image_ref"], 
-                     image_path, 
-                     instance["user_id"], 
-                     instance["project_id"])
+        image_base_path = self._get_cobbler_image_path()
+        if not os.path.exists(image_base_path):
+            utils.execute('mkdir', '-p', image_base_path)
+
+        image_path = self._get_cobbler_image_path(instance)
+        if not os.path.exists(image_path):
+            image_meta = images.fetch(context, 
+                                      instance["image_ref"], 
+                                      image_path, 
+                                      instance["user_id"], 
+                                      instance["project_id"])
+        else:
+            image_meta = images.show(context, instance["image_ref"])
+
         LOG.debug(image_meta) 
         image_type = "server"
         image_name = image_meta["name"] or image_meta["properties"]["image_location"]
@@ -209,10 +216,15 @@ class DodaiConnection(driver.ComputeDriver):
         pxe_mac = bmm["pxe_mac"] or "None"
         storage_ip = bmm["storage_ip"] or "None"
         storage_mac = bmm["storage_mac"] or "None"
- 
+
+        instance_path = self._get_cobbler_instance_path(instance) 
+        if not os.path.exists(instance_path):
+            utils.execute('mkdir', '-p', instance_path)
+
         self._cp_template("create.sh", 
-                          self._get_cobbler_path(instance, "create.sh"),
+                          self._get_cobbler_instance_path(instance, "create.sh"),
                           {"INSTANCE_ID": instance["id"], 
+                           "IMAGE_ID": instance["image_ref"], 
                            "COBBLER": FLAGS.cobbler, 
                            "HOST_NAME": bmm["name"], 
                            "STORAGE_IP": storage_ip,
@@ -257,21 +269,19 @@ class DodaiConnection(driver.ComputeDriver):
         if update_instance:
             db.instance_update(context, instance["id"], {"vm_state": vm_states.ACTIVE})
     
-    def _update_ofc(self, bmm, cluster_name, vlan_id, create_cluster):
+    def _update_ofc(self, bmm, cluster_name):
         try:
             ofc_utils.update_for_run_instance(FLAGS.ofc_service_url, 
                                               cluster_name, 
                                               bmm["server_port1"],
                                               bmm["server_port2"],
                                               bmm["dpid1"],
-                                              bmm["dpid2"],
-                                              vlan_id,
-                                              create_cluster)
-        except:
-            pass
+                                              bmm["dpid2"])
+        except Exception as ex:
+            LOG.exception(_("OFC exception %s"), unicode(ex))
 
     def _get_state(self, instance):
-        path = self._get_cobbler_path(instance, "state")
+        path = self._get_cobbler_instance_path(instance, "state")
         if not os.path.exists(path):
             return ""
 
@@ -302,19 +312,30 @@ class DodaiConnection(driver.ComputeDriver):
             instance_ref = db.instance_get(context, bmm["instance_id"])
             LOG.debug(instance_ref["image_ref"])
             if instance_ref["image_ref"] == instance["image_ref"]:
+                db.bmm_update(context, bmm["id"], {"status": "processing"})
                 return bmm, True
 
         for bmm in db.bmm_get_all_by_instance_type(context, inst_type["name"]):
             if bmm["status"] != "used" and bmm["status"] != "processing":
+                db.bmm_update(context, bmm["id"], {"status": "processing"})
                 return bmm, False
 
         raise exception.BareMetalMachineUnavailable()  
 
-    def _get_cobbler_path(self, instance, file_name = ""):
+    def _get_cobbler_instance_path(self, instance, file_name = ""):
         return os.path.join(FLAGS.cobbler_path,
-                     "images",
+                     "instances",
                      str(instance["id"]),
                      file_name)
+
+    def _get_cobbler_image_path(self, instance = None):
+        if instance:
+            return os.path.join(FLAGS.cobbler_path,
+                                "images",
+                                str(instance["image_ref"]))
+        else:
+            return os.path.join(FLAGS.cobbler_path,
+                                "images")
 
     def _get_pxe_boot_file(self, mac):
         return os.path.join(FLAGS.pxe_boot_path, mac)
@@ -369,11 +390,12 @@ class DodaiConnection(driver.ComputeDriver):
         LOG.debug("destroy")
 
         bmm = db.bmm_get_by_instance_id(context, instance["id"])
+        db.bmm_update(context, bmm["id"], {"status": "processing"})
         mac = self._get_pxe_mac(bmm)
 
         # begin to delete os
         self._cp_template("delete.sh",
-                          self._get_cobbler_path(instance, "delete.sh"), 
+                          self._get_cobbler_instance_path(instance, "delete.sh"), 
                           {"INSTANCE_ID": instance["id"],
                            "COBBLER": FLAGS.cobbler,
                            "MONITOR_PORT": FLAGS.dodai_monitor_port})
@@ -387,8 +409,7 @@ class DodaiConnection(driver.ComputeDriver):
             greenthread.sleep(20)
             LOG.debug("wait until data of instance %s was deleted." % instance["id"])
 
-        utils.execute("rm", "-rf", self._get_cobbler_path(instance));
-        db.bmm_update(context, bmm["id"], {"status": "inactive"})
+        utils.execute("rm", "-rf", self._get_cobbler_instance_path(instance));
 
         bmms = db.bmm_get_by_availability_zone(context, bmm["availability_zone"])
         delete_cluster = len(bmms) == 1
@@ -403,14 +424,13 @@ class DodaiConnection(driver.ComputeDriver):
                                                     bmm["dpid2"],
                                                     bmm["vlan_id"],
                                                     delete_cluster)
-        except:
-            pass
+        except Exception as ex:
+            LOG.exception(_("OFC exception %s"), unicode(ex))
 
         # update db
         db.bmm_update(context, bmm["id"], {"instance_id": None, 
                                         "availability_zone": "resource_pool",
-                                        "vlan_id": None,
-                                        "status": "inactive"})
+                                        "vlan_id": None})
 
         return db.bmm_get(context, bmm["id"])
 

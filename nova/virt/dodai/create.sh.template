@@ -30,7 +30,7 @@ function copy_fs {
   mkdir /mnt/sda4
   mount /dev/sda4 /mnt/sda4
 
-  wget -O /mnt/sda4/image http://$cobbler/cobbler/images/$instance_id/disk
+  wget -O /mnt/sda4/image http://$cobbler/cobbler/images/$image_id
   mkdir /mnt/image
   mount -o loop -t ext4 /mnt/sda4/image /mnt/image
 
@@ -93,6 +93,7 @@ function notify {
 cobbler=COBBLER
 host_name=HOST_NAME
 instance_id=INSTANCE_ID
+image_id=IMAGE_ID
 storage_ip=STORAGE_IP
 storage_mac=STORAGE_MAC
 pxe_ip=PXE_IP

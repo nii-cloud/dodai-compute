@@ -46,6 +46,10 @@ def fetch(context, image_href, path, _user_id, _project_id):
         metadata = image_service.get(context, image_id, image_file)
     return metadata
 
+def show(context, image_href):
+    (image_service, image_id) = nova.image.get_image_service(context,
+                                                             image_href)
+    return image_service.show(context, image_id)
 
 def fetch_to_raw(context, image_href, path, user_id, project_id):
     path_tmp = "%s.part" % path

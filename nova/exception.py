@@ -875,5 +875,11 @@ class OFCRegionNotFound(RunInstancesFailed):
 class OFCRegionExisted(RunInstancesFailed):
     message = _("Region %(region_name)s of open flow controller has existed.")
 
+class OFCRegionCreationFailed(RunInstancesFailed):
+    message = _("It failed to create region %(region_name)s.")
+
+class OFCRegionSettingOuterPortAssocFailed(RunInstancesFailed):
+    message = _("It failed set outer port association for region %(region_name)s and vlan id %(vlan_id)d.")
+
 class NotEnoughMachines(RunInstancesFailed):
     message = _("%(max_count)d machines were required, but only %(available_count)d machines are available.")

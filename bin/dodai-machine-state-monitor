@@ -23,7 +23,7 @@ def application(envs, start_response):
     tmp, instance_id, state = url.split("/")
     print "State of instance %s: %s" % (instance_id, state)
 
-    f = open('/var/www/cobbler/images/%s/state' % instance_id, 'w')
+    f = open('/var/www/cobbler/instances/%s/state' % instance_id, 'w')
     f.write(state)
     f.close()
 
