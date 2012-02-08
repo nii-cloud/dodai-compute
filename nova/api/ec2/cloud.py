@@ -1459,7 +1459,7 @@ class CloudController(object):
             return self._format_run_instances(context,
                     reservation_id=instances[0]['reservation_id'])
         except Exception as ex:
-            ofc_utils.delete_region(FLAGS.ofc_service_url, cluster_name, vlan_id)
+            ofc_utils.remove_region(FLAGS.ofc_service_url, cluster_name, vlan_id)
             raise ex
 
     def _do_instance(self, action, context, ec2_id):

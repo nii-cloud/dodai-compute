@@ -163,7 +163,7 @@ def execute(*cmd, **kwargs):
     while attempts > 0:
         attempts -= 1
         try:
-            LOG.debug(_('Running cmd (subprocess): %s'), ' '.join(cmd))
+            #LOG.debug(_('Running cmd (subprocess): %s'), ' '.join(cmd))
             _PIPE = subprocess.PIPE  # pylint: disable=E1101
             obj = subprocess.Popen(cmd,
                                    stdin=_PIPE,

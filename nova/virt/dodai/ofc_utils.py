@@ -22,7 +22,7 @@ def update_for_terminate_instance(service_url, region_name, server_port1, server
         client.service.save()
         return
 
-    delete_region(service_url, region_name, vlan_id)
+    remove_region(service_url, region_name, vlan_id)
 
 def create_region(service_url, region_name, vlan_id):
     client = Client(service_url + "?wsdl")
@@ -40,7 +40,7 @@ def create_region(service_url, region_name, vlan_id):
         client.service.destroyRegion(region_name)
         raise exception.OFCRegionSettingOuterPortAssocFailed(region_name=region_name, vlan_id=vlan_id)
 
-def delete_region(service_url, region_name, vlan_id):
+def remove_region(service_url, region_name, vlan_id):
     client = Client(service_url + "?wsdl")
 
     switches = db.switch_get_all(None)
