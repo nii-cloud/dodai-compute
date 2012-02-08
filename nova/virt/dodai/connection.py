@@ -199,7 +199,8 @@ class DodaiConnection(driver.ComputeDriver):
             if reuse:
                 db.bmm_update(context, bmm["id"], {"availability_zone": cluster_name, 
                                                    "status": "used", 
-                                                   "instance_id": instance["id"]}) 
+                                                   "instance_id": instance["id"],
+                                                   "vlan_id": vlan_id}) 
             else:
                 self._install_machine(context, instance, bmm, cluster_name, vlan_id)
 
@@ -450,6 +451,7 @@ class DodaiConnection(driver.ComputeDriver):
 
         # update ofc
         try:
+            LOG.debug("vlan_id: " + str(bmm["vlan_id"]))
             ofc_utils.update_for_terminate_instance(FLAGS.ofc_service_url,
                                                     bmm["availability_zone"],
                                                     bmm["server_port1"],
