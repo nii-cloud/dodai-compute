@@ -1399,7 +1399,7 @@ class CloudController(object):
         zone = kwargs.get('placement').get('availability_zone')
         def _validate_zone(zone):
             if zone == "resource_pool":
-                return
+                return False, zone, None
 
             parts = zone.split(",")
             if len(parts) < 2 or len(parts) > 3:
@@ -1435,7 +1435,7 @@ class CloudController(object):
 
         _validate_max_count(max_count)
         create_cluster, cluster_name, vlan_id = _validate_zone(zone)
-        if create_cluster:
+        if create_cluster and cluster_name != "resource_pool" :
             ofc_utils.create_region(FLAGS.ofc_service_url, cluster_name, vlan_id) 
 
         try:
