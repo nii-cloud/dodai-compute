@@ -4075,6 +4075,17 @@ def bmm_get_all(context):
                    all()
 
 
+def bmm_get_all_by_instance_id_not_null(context):
+    """
+    Get all Bare Metal Machine records.
+    """
+    session = get_session_dodai()
+    return session.query(models.BareMetalMachine).\
+                   filter(models.BareMetalMachine.instance_id != None).\
+                   filter_by(deleted=False).\
+                   all()
+
+
 def bmm_get_all_by_instance_type(context, bmm_instance_type, session=None):
     """
     Get Bare Metal Machine record by instance type.

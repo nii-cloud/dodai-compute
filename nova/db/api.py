@@ -1603,6 +1603,10 @@ def bmm_get_all(context):
     """Get all Bare Metal Machine records."""
     return IMPL.bmm_get_all(context)
 
+def bmm_get_all_by_instance_id_not_null(context):
+    """Get all Bare Metal Machine records."""
+    return IMPL.bmm_get_all_by_instance_id_not_null(context)
+
 def bmm_get_all_by_instance_type(context, instance_type):
     """Get Bare Metal Machine records by instance type."""
     return IMPL.bmm_get_all_by_instance_type(context, instance_type)

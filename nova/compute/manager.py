@@ -1733,7 +1733,7 @@ class ComputeManager(manager.SchedulerDependentManager):
         on the hypervisor.
 
         """
-        vm_instances = self.driver.list_instances_detail()
+        vm_instances = self.driver.list_instances_detail(context)
         vm_instances = dict((vm.name, vm) for vm in vm_instances)
         db_instances = self.db.instance_get_all_by_host(context, self.host)
 

@@ -47,17 +47,25 @@ def get_connection(_):
     return DodaiConnection.instance()
 
 
-class DodaiInstance(object):
-
-    def __init__(self, name, state):
-        self.name = name
-        self.state = state
-
 class DodaiConnection(driver.ComputeDriver):
     """Dodai hypervisor driver"""
 
     def __init__(self):
-        self.instances = {}
+        self.host_status = {
+          'host_name-description': 'Dodai Compute',
+          'host_hostname': 'dodai-compute',
+          'host_memory_total': 8000000000,
+          'host_memory_overhead': 10000000,
+          'host_memory_free': 7900000000,
+          'host_memory_free_computed': 7900000000,
+          'host_other_config': {},
+          'host_ip_address': '192.168.1.109',
+          'host_cpu_info': {},
+          'disk_available': 500000000000,
+          'disk_total': 600000000000,
+          'disk_used': 100000000000,
+          'host_uuid': 'cedb9b39-9388-41df-8891-c5c9a0c0fe5f',
+          'host_name_label': 'dodai-compute'}
 
     @classmethod
     def instance(cls):
@@ -70,6 +78,9 @@ class DodaiConnection(driver.ComputeDriver):
         including catching up with currently running VM's on the given host."""
         LOG.debug("init_host")
 
+    def get_host_stats(self, refresh=False):
+        """Return Host Status of ram, disk, network."""
+        return self.host_status
 
     def get_info(self, instance_name):
         """Get the current status of an instance, by name (not ID!)
@@ -83,11 +94,16 @@ class DodaiConnection(driver.ComputeDriver):
         :cpu_time:        (int) the CPU time used in nanoseconds
         """
         LOG.debug("get_info")
-        if instance_name not in self.instances:
-            raise exception.InstanceNotFound(instance_id=instance_name)
 
-        i = self.instances[instance_name]
-        return {'state': i.state,
+        instance_id = self._instance_name_to_id(instance_name)
+        bmm = db.bmm_get_by_instance_id(None, instance_id)
+        status = PowerManager(bmm["ipmi_ip"]).status()
+        if status == "on":
+            inst_power_state = power_state.RUNNING
+        else:
+            inst_power_state = power_state.SHUTOFF
+
+        return {'state': inst_power_state,
                 'max_mem': 0,
                 'mem': 0,
                 'num_cpu': 2,
@@ -103,24 +119,42 @@ class DodaiConnection(driver.ComputeDriver):
         instance_ids = []
         bmms = db.bmm_get_all(None)
         for bmm in bmms:
-            if bmm["status"] != "active":
+            if not bmm["instance_id"]:
                 continue
-            instance_ids.append(bmm["instance_id"])
+            instance_ids.append(self._instance_id_to_name(bmm["instance_id"]))
 
         return instance_ids
 
-    def list_instances_detail(self):
+    def list_instances_detail(self, context):
         """Return a list of InstanceInfo for all registered VMs"""
         LOG.debug("list_instances_detail")
 
         info_list = []
-        bmms = db.bmm_get_all(None)
+        bmms = db.bmm_get_all_by_instance_id_not_null(context)
         for bmm in bmms:
-            if bmm["status"] != "used":
-                continue
-            info_list.append(driver.InstanceInfo(bmm["instance_id"], "running"))
+            instance = db.instance_get(context, bmm["instance_id"])
+            status = PowerManager(bmm["ipmi_ip"]).status()
+            if status == "off":
+                inst_power_state = power_state.SHUTOFF
 
-        return info_list        
+                if instance["vm_state"] == vm_states.ACTIVE:
+                    db.instance_update(context, instance["id"], {"vm_state": vm_states.STOPPED})
+            else:
+                inst_power_state = power_state.RUNNING
+
+                if instance["vm_state"] == vm_states.STOPPED:
+                    db.instance_update(context, instance["id"], {"vm_state": vm_states.ACTIVE})
+
+            info_list.append(driver.InstanceInfo(self._instance_id_to_name(bmm["instance_id"]), 
+                                                 inst_power_state))
+
+        return info_list
+
+    def _instance_id_to_name(self, instance_id):
+        return FLAGS.instance_name_template % instance_id
+
+    def _instance_name_to_id(self, instance_name):
+        return int(instance_name.split("-")[1], 16)  
 
     def spawn(self, context, instance,
               network_info=None, block_device_info=None):
