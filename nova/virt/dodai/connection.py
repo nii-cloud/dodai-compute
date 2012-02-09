@@ -428,6 +428,9 @@ class DodaiConnection(driver.ComputeDriver):
         db.bmm_update(context, bmm["id"], {"status": "processing"})
         mac = self._get_pxe_mac(bmm)
 
+        # update ofc
+        self._update_ofc_for_destroy(context, bmm)
+
         # begin to delete os
         self._cp_template("delete.sh",
                           self._get_cobbler_instance_path(instance, "delete.sh"), 
@@ -446,8 +449,20 @@ class DodaiConnection(driver.ComputeDriver):
 
         utils.execute("rm", "-rf", self._get_cobbler_instance_path(instance));
 
+        # update db
+        db.bmm_update(context, bmm["id"], {"instance_id": None, "service_ip": None})
+
+        return db.bmm_get(context, bmm["id"])
+
+    def _update_ofc_for_destroy(self, context, bmm):
+        if bmm["availability_zone"] == "resource_pool":
+            return
+
+        db.bmm_update(context, bmm["id"], {"vlan_id": None,
+                                           "availability_zone": "resource_pool"})
+
         bmms = db.bmm_get_by_availability_zone(context, bmm["availability_zone"])
-        delete_cluster = len(bmms) == 1
+        delete_cluster = len(bmms) == 0 
 
         # update ofc
         try:
@@ -462,13 +477,6 @@ class DodaiConnection(driver.ComputeDriver):
                                                     delete_cluster)
         except Exception as ex:
             LOG.exception(_("OFC exception %s"), unicode(ex))
-
-        # update db
-        db.bmm_update(context, bmm["id"], {"instance_id": None, 
-                                        "availability_zone": "resource_pool",
-                                        "vlan_id": None})
-
-        return db.bmm_get(context, bmm["id"])
 
     def add_to_resource_pool(self, context, instance, bmm):
         # begin to install default os
