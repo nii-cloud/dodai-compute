@@ -116,5 +116,3 @@ grub_install
 notify "install_reboot"
 
 echo "Initialization finished."
-
-reboot

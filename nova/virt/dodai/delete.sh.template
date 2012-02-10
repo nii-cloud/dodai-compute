@@ -8,5 +8,3 @@ instance_id=INSTANCE_ID
 #dd if=/dev/zero of=/dev/sda
 
 wget http://$cobbler:$monitor_port/$instance_id/deleted -q
-
-reboot

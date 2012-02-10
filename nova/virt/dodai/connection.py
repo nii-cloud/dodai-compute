@@ -240,7 +240,6 @@ class DodaiConnection(driver.ComputeDriver):
         else:
             image_meta = images.show(context, instance["image_ref"])
 
-        LOG.debug(image_meta) 
         image_type = "server"
         image_name = image_meta["name"] or image_meta["properties"]["image_location"]
         if image_name.find("dodai-deploy") == -1:
@@ -276,19 +275,30 @@ class DodaiConnection(driver.ComputeDriver):
                           self._get_pxe_boot_file(mac), 
                           {"INSTANCE_ID": instance["id"], "COBBLER": FLAGS.cobbler})
  
-        LOG.debug("reboot or power on.")
+        LOG.debug("Reboot or power on.")
         self._reboot_or_power_on(bmm["ipmi_ip"])
  
         # wait until starting to install os
         while self._get_state(instance) != "install":
             greenthread.sleep(20)
-            LOG.debug("wait until begin to install instance %s." % instance["id"])
+            LOG.debug("Wait until begin to install instance %s." % instance["id"])
         self._cp_template("pxeboot_start", self._get_pxe_boot_file(mac), {})
- 
+
+        # wait until starting to reboot 
+        while self._get_state(instance) != "install_reboot":
+            greenthread.sleep(20)
+            LOG.debug("Wait until begin to reboot instance %s after os has been installed." % instance["id"])
+        power_manager = PowerManager(bmm["ipmi_ip"])
+        power_manager.soft_off()
+        while power_manager.status() == "on":
+            greenthread.sleep(20)
+            LOG.debug("Wait unit the instance %s shuts down." % instance["id"])
+        power_manager.on()
+
         # wait until installation of os finished
         while self._get_state(instance) != "installed":
             greenthread.sleep(20)
-            LOG.debug("wait until instance %s installation finished." % instance["id"])
+            LOG.debug("Wait until instance %s installation finished." % instance["id"])
  
         if cluster_name == "resource_pool":
             status = "active"
@@ -445,7 +455,7 @@ class DodaiConnection(driver.ComputeDriver):
         # wait until starting to delete os
         while self._get_state(instance) != "deleted":
             greenthread.sleep(20)
-            LOG.debug("wait until data of instance %s was deleted." % instance["id"])
+            LOG.debug("Wait until data of instance %s was deleted." % instance["id"])
 
         utils.execute("rm", "-rf", self._get_cobbler_instance_path(instance));
 
@@ -532,6 +542,9 @@ class PowerManager(object):
 
     def off(self):
         return self._execute("off")
+
+    def soft_off(self):
+        return self._execute("soft")
 
     def reboot(self):
         return self._execute("reset")

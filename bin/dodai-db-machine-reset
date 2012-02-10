@@ -1,0 +1,5 @@
+#!/bin/bash
+
+cd `dirname $0`
+
+mysql -uroot -pnova dodai -e "update bare_metal_machines set instance_id=null, status='inactive', availability_zone='resource_pool', service_ip=null, vlan_id=null where id=$1;"
