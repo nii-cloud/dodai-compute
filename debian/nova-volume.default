@@ -1,0 +1,5 @@
+# nova-volume default vg to use.
+# If nothing is set here, then nova-volume will pickup the
+# first volume group it sees using the following command:
+# vgdisplay -c -A | tail -n 1 | cut -d":" -f1 | awk '{print $1}'
+#nova_volume_group=

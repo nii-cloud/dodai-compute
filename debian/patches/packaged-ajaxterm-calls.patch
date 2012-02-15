@@ -1,0 +1,19 @@
+Description: Fixes command line for ajaxterm
+Forwarded: not-needed
+Author: Soren Hansen <soren@ubuntu.com>
+Last-Update: 2011-04-15
+Index: nova-2011.3~bzr1113/nova/virt/libvirt/connection.py
+===================================================================
+--- nova-2011.3~bzr1113.orig/nova/virt/libvirt/connection.py
++++ nova-2011.3~bzr1113/nova/virt/libvirt/connection.py
+@@ -681,8 +681,8 @@
+         ajaxterm_cmd = 'sudo socat - %s' \
+                        % get_pty_for_instance(instance['name'])
+
+-        cmd = ['%s/tools/ajaxterm/ajaxterm.py' % utils.novadir(),
+-               '--command', ajaxterm_cmd, '-t', token, '-p', port]
++        cmd = ['ajaxterm', '--command', ajaxterm_cmd, '-t', token,
++                '-p', port, '-T', '300']
+
+         utils.execute(cmd)
+         return {'token': token, 'host': host, 'port': port}

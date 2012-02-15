@@ -4,3 +4,4 @@ nova.egg-info
 instances
 networks
 *.sqlite
+doc/source

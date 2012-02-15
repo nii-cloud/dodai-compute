@@ -1,0 +1,11 @@
+/var/log/nova/nova-objectstore.log {
+    daily
+    missingok
+    postrotate
+        if dpkg-vendor --derives-from ubuntu ; then
+            restart nova-objectstore
+        else
+            invoke-rc.d nova-objectstore restart 2>&1 >/dev/null
+        fi
+    endscript
+}

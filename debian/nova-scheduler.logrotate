@@ -1,0 +1,4 @@
+/var/log/nova/nova-scheduler.log {
+    daily
+    missingok
+}

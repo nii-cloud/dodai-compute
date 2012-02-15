@@ -1,0 +1,4 @@
+/var/log/nova/nova-network.log {
+    daily
+    missingok
+}

@@ -1,0 +1,6 @@
+To do a release to the ubuntu archive:
+
+1. dch --release && debcommit --release
+2. bzr bd -S
+3. dput
+4. Once it has been accepted: bzr push

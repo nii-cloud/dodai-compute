@@ -1,0 +1,3 @@
+nova-compute-deps= lsb-base, qemu-utils, adduser, libvirt-bin (>= 0.9.0)
+ostack-lsb-base= lsb-base
+nova-compute-default-hypervisor=nova-compute-kvm

@@ -1,0 +1,2 @@
+nova-compute-deps= adduser, libvirt-bin (>= 0.8.8), qemu-kvm
+nova-compute-default-hypervisor=nova-compute-kvm

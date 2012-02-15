@@ -1,0 +1,16 @@
+#!/bin/sh -e
+
+if [ "$1" = "configure" ]; then
+    if ! getent passwd nova > /dev/null 2>&1; then
+        adduser --system --home /var/lib/nova --no-create-home --shell /bin/bash nova
+    fi
+    chown -R nova:root /var/lib/nova/ /var/log/nova/ /etc/nova/nova.conf
+    chmod 600 /etc/nova/nova.conf
+	chmod 0440 /etc/sudoers.d/nova_sudoers
+	if ! grep -q sql_connection /etc/nova/nova.conf
+	then
+		su -c 'nova-manage db sync' nova
+	fi
+fi
+
+#DEBHELPER#

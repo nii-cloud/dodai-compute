@@ -1,0 +1,10 @@
+#!/bin/sh -e
+
+if [ "$1" = "configure" ]; then
+    if ! getent group %LIBVIRTGRP% | grep -qE '\<nova\>'
+    then
+        adduser nova %LIBVIRTGRP%
+    fi
+fi
+
+#DEBHELPER#

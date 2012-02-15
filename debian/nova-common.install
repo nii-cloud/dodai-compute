@@ -1,0 +1,11 @@
+usr/bin/nova-manage
+usr/bin/dodai-machine-state-monitor
+usr/bin/dodai-db-all
+usr/bin/dodai-db-create
+usr/bin/dodai-db-drop
+usr/bin/dodai-db-init
+usr/bin/dodai-db-machine-reset
+usr/bin/dodai-db-show
+usr/bin/dodai-instances-remove
+debian/nova_sudoers etc/sudoers.d
+debian/nova.conf    etc/nova

@@ -1,0 +1,81 @@
+#!/usr/bin/make -f
+
+# Verbose mode
+#export DH_VERBOSE=1
+
+# Lucid does not have dh_python2, but we would like to be able to use this
+# rules file to build on lucid as well. Thus the branching logic.
+WITH_PYTHON2 = $(shell test -f /usr/bin/dh_python2 && echo "--with python2")
+
+%:
+	dh $@ ${WITH_PYTHON2}
+
+override_dh_auto_clean:
+	dh_auto_clean
+	rm -rf doc/doc/build tests.sqlite clean.sqlite
+	rm -rf debian/*.upstart
+	rm -f debian/nova-common.manpages
+	rm -f doc/doc/build/man/nova-manage.1
+
+debian/nova-compute.postinst: debian/nova-compute.postinst.in
+	if dpkg-vendor --derives-from ubuntu ; then \
+		LIBVIRTGRP=libvirtd; \
+	else \
+		LIBVIRTGRP=libvirt; \
+	fi; \
+	sed -e "s/%LIBVIRTGRP%/$$LIBVIRTGRP/" < $< > $@
+
+override_dh_auto_build: debian/nova-compute.postinst
+	dh_auto_build
+ifeq (,$(findstring nodocs, $(DEB_BUILD_OPTIONS)))
+	python setup.py build_sphinx
+	cp $(CURDIR)/debian/nova-common.manpages.in $(CURDIR)/debian/nova-common.manpages
+	cp $(CURDIR)/doc/doc/build/man/novamanage.1 $(CURDIR)/doc/doc/build/man/nova-manage.1
+else
+	mkdir -p $(CURDIR)/doc/doc/build/html
+endif
+
+get-orig-source:
+	uscan --verbose --force-download --rename --destdir=../build-area
+
+override_dh_install:
+	dh_install
+	chmod 440 $(CURDIR)/debian/nova-common/etc/sudoers.d/nova_sudoers
+	install -D -m 0664 $(CURDIR)/debian/nova-volume.default	$(CURDIR)/debian/nova-volume/etc/default/nova-volume
+	for hypervisor in kvm xen uml lxc; do \
+		install -D -m 0600 $(CURDIR)/debian/nova-compute-$${hypervisor}.conf $(CURDIR)/debian/nova-compute-$${hypervisor}/etc/nova/nova-compute.conf; \
+	done
+
+override_dh_fixperms:
+	dh_fixperms -Xnova_sudoers
+	rm -f $(CURDIR)/debian/python-nova/usr/share/pyshared/nova/CA/.gitignore
+	rm -f $(CURDIR)/debian/python-nova/usr/share/pyshared/nova/CA/projects/.gitignore
+	rm -f $(CURDIR)/debian/python-nova/usr/share/pyshared/nova/CA/reqs/.gitignore
+
+ifeq (,$(findstring nocheck, $(DEB_BUILD_OPTIONS)))
+override_dh_auto_test:
+	#./run_tests.sh -N || true
+endif
+
+override_dh_installinit:
+	if dpkg-vendor --derives-from ubuntu ; then \
+		for i in debian/*.upstart.in ; do \
+			MYPKG=`echo $$i | cut -d. -f1` ; \
+			cp $$MYPKG.upstart.in $$MYPKG.upstart ; \
+		done ; \
+	fi
+	dh_installinit --error-handler=true
+
+ifeq (,$(findstring nodocs, $(DEB_BUILD_OPTIONS)))
+override_dh_installdocs:
+	dh_installdocs
+	rm -f $(CURDIR)/debian/nova-doc/usr/share/doc/nova-doc/html/_static/jquery.js
+	ln -s ../../../../javascript/jquery/jquery.js $(CURDIR)/debian/nova-doc/usr/share/doc/nova-doc/html/_static/jquery.js
+endif
+
+override_dh_gencontrol:
+	if dpkg-vendor --derives-from ubuntu ; then \
+		dh_gencontrol -- -T$(CURDIR)/debian/ubuntu_control_vars ; \
+	else \
+		dh_gencontrol -- -T$(CURDIR)/debian/debian_control_vars ; \
+	fi

@@ -125,6 +125,14 @@ setup(name='nova',
                'bin/nova-direct-api',
                'bin/nova-logspool',
                'bin/nova-manage',
+               'bin/dodai-machine-state-monitor',
+               'bin/dodai-db-all',
+               'bin/dodai-db-create',
+               'bin/dodai-db-drop',
+               'bin/dodai-db-init'
+               'bin/dodai-db-machine-reset'
+               'bin/dodai-db-show'
+               'bin/dodai-instances-remove'
                'bin/nova-network',
                'bin/nova-objectstore',
                'bin/nova-scheduler',

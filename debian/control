@@ -1,0 +1,409 @@
+Source: nova
+Section: net
+Priority: extra
+Maintainer: Ubuntu Developers <ubuntu-devel-discuss@lists.ubuntu.com>
+XSBC-Original-Maintainer: Openstack Maintainers <openstack@lists.launchpad.net>
+Uploaders: Soren Hansen <soren@ubuntu.com>, Thomas Goirand <zigo@debian.org>
+Build-Depends: debhelper (>= 7.0.50),
+ python-m2crypto,
+ python-all (>= 2.6),
+ python-all-dev (>= 2.6.6-3~) | python-support,
+Build-Depends-Indep:
+ python-setuptools,
+ python-sphinx (>> 1.0),
+ python-distutils-extra,
+ python-gflags,
+ python-mox,
+ openssl,
+ python-carrot,
+ python-kombu,
+ python-boto,
+ python-amqplib,
+ openssh-client,
+ python-sqlalchemy-ext | python-sqlalchemy (<< 0.6.3-2),
+ python-eventlet,
+ python-routes,
+ python-webob,
+ python-cheetah,
+ python-nose,
+ python-paste,
+ python-pastedeploy,
+ python-tempita,
+ python-migrate,
+ python-netaddr,
+ python-glance,
+ python-paramiko,
+ python-novaclient,
+ python-lockfile,
+ python-simplejson,
+ python-lxml,
+ python-unittest2,
+ pep8
+Build-Conflicts: python-cjson
+Standards-Version: 3.9.1
+Homepage: http://launchpad.net/nova
+Vcs-Browser: http://bazaar.launchpad.net/~openstack-ubuntu-packagers/ubuntu/natty/nova/ubuntu/files
+Vcs-Bzr: http://bazaar.launchpad.net/~openstack-ubuntu-packagers/ubuntu/natty/nova/ubuntu/
+
+
+Package: python-nova
+Architecture: all
+Section: python
+Depends: ${python:Depends},
+ python-boto,
+ python-m2crypto,
+ python-pycurl,
+ python-daemon,
+ python-carrot,
+ python-kombu,
+ python-lockfile,
+ python-gflags,
+ openssl,
+ python-libxml2,
+ python-ldap,
+ python-sqlalchemy-ext | python-sqlalchemy (<< 0.6.3-2),
+ python-eventlet,
+ python-routes,
+ python-webob,
+ python-cheetah,
+ python-netaddr,
+ python-paste,
+ python-pastedeploy,
+ python-tempita,
+ python-migrate,
+ python-netaddr,
+ python-glance,
+ python-novaclient,
+ python-simplejson,
+ python-lxml,
+ sudo,
+ ${misc:Depends}
+Suggests: python-suds (>= 0.4.0),
+Conflicts: python-cjson
+XB-Python-Version: ${python:Versions}
+Recommends: python-mysqldb
+Provides: ${python:Provides}
+Description: OpenStack Compute Python libraries
+ OpenStack is a reliable cloud infrastructure. Its mission is to produce
+ the ubiquitous cloud computing platform that will meet the needs of public
+ and private cloud providers regardless of size, by being simple to implement
+ and massively scalable.
+ .
+ OpenStack Compute, codenamed Nova, is a cloud computing fabric controller. In
+ addition to its "native" API (the OpenStack API), it also supports the Amazon
+ EC2 API.
+ .
+ Nova is intended to be modular and easy to extend and adapt. It supports many
+ different hypervisors (KVM and Xen to name a few), different database backends
+ (SQLite, MySQL, and PostgreSQL, for instance), different types of user
+ databases (LDAP or SQL), etc.
+ .
+ This package contains the core Python parts of Nova.
+
+Package: nova-common
+Architecture: all
+Depends: python-amqplib, python-nova (= ${binary:Version}), ${python:Depends}, ${misc:Depends}, adduser
+Provides: ${python:Provides}
+Description: OpenStack Compute - common files
+ OpenStack is a reliable cloud infrastructure. Its mission is to produce
+ the ubiquitous cloud computing platform that will meet the needs of public
+ and private cloud providers regardless of size, by being simple to implement
+ and massively scalable.
+ .
+ OpenStack Compute, codenamed Nova, is a cloud computing fabric controller. In
+ addition to its "native" API (the OpenStack API), it also supports the Amazon
+ EC2 API.
+ .
+ Nova is intended to be modular and easy to extend and adapt. It supports many
+ different hypervisors (KVM and Xen to name a few), different database backends
+ (SQLite, MySQL, and PostgreSQL, for instance), different types of user
+ databases (LDAP or SQL), etc.
+ .
+ This package contains things that are needed by all parts of Nova.
+
+Package: nova-compute
+Architecture: all
+Depends: ${ostack-lsb-base}, ${nova-compute-deps}, nova-common (= ${binary:Version}), kpartx, curl, parted, vlan, ebtables, gawk, iptables, open-iscsi, ${nova-compute-default-hypervisor} | nova-compute-hypervisor,
+ ${python:Depends}, ${misc:Depends}
+Recommends: ajaxterm
+Description: OpenStack Compute - compute node
+ OpenStack is a reliable cloud infrastructure. Its mission is to produce
+ the ubiquitous cloud computing platform that will meet the needs of public
+ and private cloud providers regardless of size, by being simple to implement
+ and massively scalable.
+ .
+ OpenStack Compute, codenamed Nova, is a cloud computing fabric controller. In
+ addition to its "native" API (the OpenStack API), it also supports the Amazon
+ EC2 API.
+ .
+ Nova is intended to be modular and easy to extend and adapt. It supports many
+ different hypervisors (KVM and Xen to name a few), different database backends
+ (SQLite, MySQL, and PostgreSQL, for instance), different types of user
+ databases (LDAP or SQL), etc.
+ .
+ This is the package you will install on the nodes that will run your
+ virtual machines.
+
+Package: nova-compute-lxc
+Architecture: all
+Depends: nova-compute (= ${binary:Version}), python-libvirt, libvirt-bin, ${misc:Depends}
+Provides: nova-compute-hypervisor
+Replaces: nova-compute-hypervisor
+Conflicts: nova-compute-hypervisor
+Description: OpenStack Compute - compute node (LXC)
+ OpenStack is a reliable cloud infrastructure. Its mission is to produce
+ the ubiquitous cloud computing platform that will meet the needs of public
+ and private cloud providers regardless of size, by being simple to implement
+ and massively scalable.
+ .
+ OpenStack Compute, codenamed Nova, is a cloud computing fabric controller. In
+ addition to its "native" API (the OpenStack API), it also supports the Amazon
+ EC2 API.
+ .
+ Nova is intended to be modular and easy to extend and adapt. It supports many
+ different hypervisors (KVM and Xen to name a few), different database backends
+ (SQLite, MySQL, and PostgreSQL, for instance), different types of user
+ databases (LDAP or SQL), etc.
+ .
+ Install this package on your compute nodes if you're using LXC.
+
+Package: nova-compute-uml
+Architecture: all
+Depends: nova-compute (= ${binary:Version}), python-libvirt, libvirt-bin, user-mode-linux, ${misc:Depends}
+Provides: nova-compute-hypervisor
+Replaces: nova-compute-hypervisor
+Conflicts: nova-compute-hypervisor
+Description: OpenStack Compute - compute node (UserModeLinux)
+ OpenStack is a reliable cloud infrastructure. Its mission is to produce
+ the ubiquitous cloud computing platform that will meet the needs of public
+ and private cloud providers regardless of size, by being simple to implement
+ and massively scalable.
+ .
+ OpenStack Compute, codenamed Nova, is a cloud computing fabric controller. In
+ addition to its "native" API (the OpenStack API), it also supports the Amazon
+ EC2 API.
+ .
+ Nova is intended to be modular and easy to extend and adapt. It supports many
+ different hypervisors (KVM and Xen to name a few), different database backends
+ (SQLite, MySQL, and PostgreSQL, for instance), different types of user
+ databases (LDAP or SQL), etc.
+ .
+ Install this package on your compute nodes if you're using UserModeLinux.
+
+Package: nova-compute-xen
+Architecture: all
+Depends: nova-compute (= ${binary:Version}), python-libvirt, libvirt-bin, xen-linux-system, ${misc:Depends}
+Provides: nova-compute-hypervisor
+Replaces: nova-compute-hypervisor
+Conflicts: nova-compute-hypervisor
+Description: OpenStack Compute - compute node (Xen)
+ OpenStack is a reliable cloud infrastructure. Its mission is to produce
+ the ubiquitous cloud computing platform that will meet the needs of public
+ and private cloud providers regardless of size, by being simple to implement
+ and massively scalable.
+ .
+ OpenStack Compute, codenamed Nova, is a cloud computing fabric controller. In
+ addition to its "native" API (the OpenStack API), it also supports the Amazon
+ EC2 API.
+ .
+ Nova is intended to be modular and easy to extend and adapt. It supports many
+ different hypervisors (KVM and Xen to name a few), different database backends
+ (SQLite, MySQL, and PostgreSQL, for instance), different types of user
+ databases (LDAP or SQL), etc.
+ .
+ Install this package on your compute nodes if you're using Xen.
+
+Package: nova-compute-kvm
+Architecture: all
+Depends: nova-compute (= ${binary:Version}), python-libvirt, libvirt-bin, kvm, ${misc:Depends}
+Provides: nova-compute-hypervisor
+Replaces: nova-compute-hypervisor
+Conflicts: nova-compute-hypervisor
+Description: OpenStack Compute - compute node (KVM)
+ OpenStack is a reliable cloud infrastructure. Its mission is to produce
+ the ubiquitous cloud computing platform that will meet the needs of public
+ and private cloud providers regardless of size, by being simple to implement
+ and massively scalable.
+ .
+ OpenStack Compute, codenamed Nova, is a cloud computing fabric controller. In
+ addition to its "native" API (the OpenStack API), it also supports the Amazon
+ EC2 API.
+ .
+ Nova is intended to be modular and easy to extend and adapt. It supports many
+ different hypervisors (KVM and Xen to name a few), different database backends
+ (SQLite, MySQL, and PostgreSQL, for instance), different types of user
+ databases (LDAP or SQL), etc.
+ .
+ Install this package on your compute nodes if you're using kvm.
+
+Package: nova-scheduler
+Architecture: all
+Depends: ${ostack-lsb-base}, nova-common (= ${binary:Version}), ${python:Depends}, ${misc:Depends}
+Description: OpenStack Compute - virtual machine scheduler
+ OpenStack is a reliable cloud infrastructure. Its mission is to produce
+ the ubiquitous cloud computing platform that will meet the needs of public
+ and private cloud providers regardless of size, by being simple to implement
+ and massively scalable.
+ .
+ OpenStack Compute, codenamed Nova, is a cloud computing fabric controller. In
+ addition to its "native" API (the OpenStack API), it also supports the Amazon
+ EC2 API.
+ .
+ Nova is intended to be modular and easy to extend and adapt. It supports many
+ different hypervisors (KVM and Xen to name a few), different database backends
+ (SQLite, MySQL, and PostgreSQL, for instance), different types of user
+ databases (LDAP or SQL), etc.
+ .
+ This is the Nova scheduler.
+
+Package: nova-volume
+Architecture: all
+Depends: ${ostack-lsb-base}, nova-common (= ${binary:Version}), lvm2, iscsitarget, ${python:Depends}, ${misc:Depends}
+Suggests: sheepdog
+Description: OpenStack Compute - storage
+ OpenStack is a reliable cloud infrastructure. Its mission is to produce
+ the ubiquitous cloud computing platform that will meet the needs of public
+ and private cloud providers regardless of size, by being simple to implement
+ and massively scalable.
+ .
+ OpenStack Compute, codenamed Nova, is a cloud computing fabric controller. In
+ addition to its "native" API (the OpenStack API), it also supports the Amazon
+ EC2 API.
+ .
+ Nova is intended to be modular and easy to extend and adapt. It supports many
+ different hypervisors (KVM and Xen to name a few), different database backends
+ (SQLite, MySQL, and PostgreSQL, for instance), different types of user
+ databases (LDAP or SQL), etc.
+ .
+ This is the package you will install on your storage nodes.
+
+Package: nova-ajax-console-proxy
+Architecture: all
+Depends: ${ostack-lsb-base}, nova-common (= ${binary:Version}), ${python:Depends}, ${misc:Depends}
+Description: OpenStack Compute - AJAX console proxy
+ OpenStack is a reliable cloud infrastructure. Its mission is to produce
+ the ubiquitous cloud computing platform that will meet the needs of public
+ and private cloud providers regardless of size, by being simple to implement
+ and massively scalable.
+ .
+ OpenStack Compute, codenamed Nova, is a cloud computing fabric controller. In
+ addition to its "native" API (the OpenStack API), it also supports the Amazon
+ EC2 API.
+ .
+ Nova is intended to be modular and easy to extend and adapt. It supports many
+ different hypervisors (KVM and Xen to name a few), different database backends
+ (SQLite, MySQL, and PostgreSQL, for instance), different types of user
+ databases (LDAP or SQL), etc.
+ .
+ This package provides the AJAX proxy. It is a publically reachable
+ component which proxies access to ajaxterm's running on compute
+ nodes.
+
+Package: nova-vncproxy
+Architecture: all
+Depends: ${ostack-lsb-base}, nova-common (= ${binary:Version}), ${python:Depends}, ${misc:Depends}
+Description: OpenStack Compute - VNC proxy
+ OpenStack is a reliable cloud infrastructure. Its mission is to produce
+ the ubiquitous cloud computing platform that will meet the needs of public
+ and private cloud providers regardless of size, by being simple to implement
+ and massively scalable.
+ .
+ OpenStack Compute, codenamed Nova, is a cloud computing fabric controller. In
+ addition to its "native" API (the OpenStack API), it also supports the Amazon
+ EC2 API.
+ .
+ Nova is intended to be modular and easy to extend and adapt. It supports many
+ different hypervisors (KVM and Xen to name a few), different database backends
+ (SQLite, MySQL, and PostgreSQL, for instance), different types of user
+ databases (LDAP or SQL), etc.
+ .
+ This package provides the VNC proxy. It is a publically reachable
+ component which proxies access to VNCs running on compute nodes.
+
+Package: nova-api
+Architecture: all
+Depends: ${ostack-lsb-base}, nova-common (= ${binary:Version}), ${python:Depends}, ${misc:Depends}
+Description: OpenStack Compute - API frontend
+ OpenStack is a reliable cloud infrastructure. Its mission is to produce
+ the ubiquitous cloud computing platform that will meet the needs of public
+ and private cloud providers regardless of size, by being simple to implement
+ and massively scalable.
+ .
+ OpenStack Compute, codenamed Nova, is a cloud computing fabric controller. In
+ addition to its "native" API (the OpenStack API), it also supports the Amazon
+ EC2 API.
+ .
+ Nova is intended to be modular and easy to extend and adapt. It supports many
+ different hypervisors (KVM and Xen to name a few), different database backends
+ (SQLite, MySQL, and PostgreSQL, for instance), different types of user
+ databases (LDAP or SQL), etc.
+ .
+ This package provides the API frontend.
+
+Package: nova-network
+Architecture: all
+Depends: ${ostack-lsb-base}, socat, vlan, bridge-utils, dnsmasq-base, iputils-arping, dnsmasq-utils, nova-common (= ${binary:Version}), ${python:Depends}, ${misc:Depends}
+Suggests: radvd
+Description: OpenStack Compute - Network manager
+ OpenStack is a reliable cloud infrastructure. Its mission is to produce
+ the ubiquitous cloud computing platform that will meet the needs of public
+ and private cloud providers regardless of size, by being simple to implement
+ and massively scalable.
+ .
+ OpenStack Compute, codenamed Nova, is a cloud computing fabric controller. In
+ addition to its "native" API (the OpenStack API), it also supports the Amazon
+ EC2 API.
+ .
+ Nova is intended to be modular and easy to extend and adapt. It supports many
+ different hypervisors (KVM and Xen to name a few), different database backends
+ (SQLite, MySQL, and PostgreSQL, for instance), different types of user
+ databases (LDAP or SQL), etc.
+ .
+ This is the package you will install on the network nodes. This service is
+ responsible for managing floating and fixed IPs, DHCP, bridging and VLANs, and
+ in some cases acts as a gateway. Different networking strategies are available
+ to the service by changing the network_manager flag to FlatManager,
+ FlatDHCPManager, or VlanManager (default is VLAN).
+
+Package: nova-objectstore
+Architecture: all
+Depends: ${ostack-lsb-base}, nova-common (= ${binary:Version}), ${python:Depends}, ${misc:Depends}
+Description: OpenStack Compute - object store
+ OpenStack is a reliable cloud infrastructure. Its mission is to produce
+ the ubiquitous cloud computing platform that will meet the needs of public
+ and private cloud providers regardless of size, by being simple to implement
+ and massively scalable.
+ .
+ OpenStack Compute, codenamed Nova, is a cloud computing fabric controller. In
+ addition to its "native" API (the OpenStack API), it also supports the Amazon
+ EC2 API.
+ .
+ Nova is intended to be modular and easy to extend and adapt. It supports many
+ different hypervisors (KVM and Xen to name a few), different database backends
+ (SQLite, MySQL, and PostgreSQL, for instance), different types of user
+ databases (LDAP or SQL), etc.
+ .
+ This is the package contains a very simple S3-like object store.
+ For production use, you should use OpenStack Storage, aka. Swift.
+
+Package: nova-doc
+Architecture: all
+Section: doc
+Depends: ${misc:Depends}
+Recommends: libjs-jquery
+Description: OpenStack Compute - documetation
+ OpenStack is a reliable cloud infrastructure. Its mission is to produce
+ the ubiquitous cloud computing platform that will meet the needs of public
+ and private cloud providers regardless of size, by being simple to implement
+ and massively scalable.
+ .
+ OpenStack Compute, codenamed Nova, is a cloud computing fabric controller. In
+ addition to its "native" API (the OpenStack API), it also supports the Amazon
+ EC2 API.
+ .
+ Nova is intended to be modular and easy to extend and adapt. It supports many
+ different hypervisors (KVM and Xen to name a few), different database backends
+ (SQLite, MySQL, and PostgreSQL, for instance), different types of user
+ databases (LDAP or SQL), etc.
+ .
+ This package contains the documentation for Nova.

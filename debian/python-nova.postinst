@@ -1,0 +1,12 @@
+#!/bin/sh
+
+set -e
+
+#DEBHELPER#
+
+if [ "$1" = "configure" ]
+then
+    update-python-modules --post-install
+fi
+
+exit 0

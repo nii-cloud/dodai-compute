@@ -1,0 +1,9 @@
+Document: nova-doc
+Title: Nova Documentation
+Author: OpenStack
+Abstract: Sphinx documentation for Nova
+Section: Network/File Transfer
+
+Format: HTML
+Index: /usr/share/doc/nova-doc/html/index.html
+Files: /usr/share/doc/nova-doc/html/*

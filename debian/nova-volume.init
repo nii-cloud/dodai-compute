@@ -1,0 +1,79 @@
+#! /bin/sh
+### BEGIN INIT INFO
+# Provides:          nova-volume
+# Required-Start:    $remote_fs $syslog
+# Required-Stop:     $remote_fs $syslog
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: nova-volume
+# Description:       provides EBS like storage for your virtual machine instances
+### END INIT INFO
+
+set -e
+
+DAEMON=/usr/bin/nova-volume
+DAEMON_ARGS="--flagfile=/etc/nova/nova.conf"
+PIDFILE=/var/run/nova/nova-volume.pid
+
+ENABLED=true
+
+# Guess the VG by getting the first one we see in "vgdisplay -c -A"
+# if nothing was set in the default file
+VGDISPLAY=/sbin/vgdisplay
+if [ -f /etc/default/nova-volume ] ; then
+	. /etc/default/nova-volume
+fi
+if [ -x "${VGDISPLAY}" -a -z "${nova_volume_group}" ] ; then
+	nova_volume_group=`vgdisplay -c -A | tail -n 1 | cut -d":" -f1 | awk '{print $1}'`
+fi
+
+mkdir -p /var/run/nova
+chown nova:root /var/run/nova/
+
+mkdir -p /var/lock/nova
+chown nova:root /var/lock/nova/
+
+uid="$(getent passwd nova | cut -f3 -d:)"
+gid="$(getent passwd nova | cut -f4 -d:)"
+
+# Adds what has been configured in /etc/default/nova-volume
+if [ -n ${nova_volume_group} ] ; then
+	DAEMON_ARGS="${DAEMON_ARGS} --volume_group=${nova_volume_group}"
+fi
+
+. /lib/lsb/init-functions
+
+if ! [ -x ${DAEMON} ] ; then
+	exit 0
+fi
+
+case "$1" in
+  start)
+    test "$ENABLED" = "true" || exit 0
+    log_daemon_msg "Starting nova volume" "nova-volume"
+    start-stop-daemon --start --chdir /var/run --chuid ${uid}:${gid} -b -m --pidfile ${PIDFILE} --exec ${DAEMON} -- ${DAEMON_ARGS}
+    log_end_msg $?
+    ;;
+  stop)
+    test "$ENABLED" = "true" || exit 0
+    log_daemon_msg "Stopping nova volume" "nova-volume"
+    start-stop-daemon --stop --oknodo --pidfile ${PIDFILE}
+    log_end_msg $?
+    ;;
+  restart|force-reload)
+    test "$ENABLED" = "true" || exit 1
+    $0 start
+    sleep 1
+    $0 stop
+    ;;
+  status)
+    test "$ENABLED" = "true" || exit 0
+    status_of_proc -p $PIDFILE $DAEMON nova-volume && exit 0 || exit $?
+    ;;
+  *)
+    log_action_msg "Usage: /etc/init.d/nova-volume {start|stop|restart|force-reload|status}"
+    exit 1
+    ;;
+esac
+
+exit 0

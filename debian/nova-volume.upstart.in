@@ -1,0 +1,15 @@
+description "Nova Volume server"
+author "Soren Hansen <soren@linux2go.dk>"
+
+start on (filesystem and net-device-up IFACE!=lo)
+stop on runlevel [016]
+
+
+chdir /var/run
+
+pre-start script
+	mkdir -p /var/run/nova
+	chown nova:root /var/run/nova/
+end script
+
+exec su -c "nova-volume --flagfile=/etc/nova/nova.conf" nova
