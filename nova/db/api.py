@@ -1581,9 +1581,9 @@ def bmm_create(context, values):
     return IMPL.bmm_create(context, values)
 
 
-def bmm_update(context, bmm_id, values):
+def bmm_update(context, bmm_id, values, session=None):
     """Updates Bare Metal Machine record."""
-    return IMPL.bmm_update(context, bmm_id, values)
+    return IMPL.bmm_update(context, bmm_id, values, session)
 
 
 def bmm_destroy(context, bmm_id):
@@ -1607,9 +1607,9 @@ def bmm_get_all_by_instance_id_not_null(context):
     """Get all Bare Metal Machine records."""
     return IMPL.bmm_get_all_by_instance_id_not_null(context)
 
-def bmm_get_all_by_instance_type(context, instance_type):
+def bmm_get_all_by_instance_type(context, instance_type, session=None):
     """Get Bare Metal Machine records by instance type."""
-    return IMPL.bmm_get_all_by_instance_type(context, instance_type)
+    return IMPL.bmm_get_all_by_instance_type(context, instance_type, session)
 
 def bmm_get_all_by_instance_type_and_zone(context, instance_type, zone):
     """Get Bare Metal Machine records by instance type and zone."""

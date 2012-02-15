@@ -4006,15 +4006,17 @@ def bmm_create(context, values):
     return bmm_ref
 
 
-def bmm_update(context, bmm_id, values):
+def bmm_update(context, bmm_id, values, session=None):
     """
     Updates Bare Metal Machine record.
     """
-    session = get_session_dodai()
-    with session.begin():
-        bmm_ref = bmm_get(context, bmm_id, session=session)
-        bmm_ref.update(values)
-        bmm_ref.save(session=session)
+    if not session:
+        session = get_session_dodai()
+        session.begin()
+
+    bmm_ref = bmm_get(context, bmm_id, session=session)
+    bmm_ref.update(values)
+    bmm_ref.save(session=session)
     return bmm_ref
 
 
@@ -4075,11 +4077,12 @@ def bmm_get_all(context):
                    all()
 
 
-def bmm_get_all_by_instance_id_not_null(context):
+def bmm_get_all_by_instance_id_not_null(context, session=None):
     """
     Get all Bare Metal Machine records.
     """
-    session = get_session_dodai()
+    if not session:
+        session = get_session_dodai()
     return session.query(models.BareMetalMachine).\
                    filter(models.BareMetalMachine.instance_id != None).\
                    filter_by(deleted=False).\

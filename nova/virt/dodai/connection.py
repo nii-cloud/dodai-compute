@@ -329,8 +329,8 @@ class DodaiConnection(driver.ComputeDriver):
     def _get_state(self, context, instance):
         # check if instance exists
         instance_ref = db.instance_get(context, instance["id"])
-        if instance_ref["vm_state"] == vm_states.DELETED:
-            raise InstanceNotFound(instance_id=instance["id"]) 
+        if instance_ref["deleted"]:
+            raise exception.InstanceNotFound(instance_id=instance["id"]) 
 
         path = self._get_cobbler_instance_path(instance, "state")
         if not os.path.exists(path):
@@ -352,12 +352,14 @@ class DodaiConnection(driver.ComputeDriver):
     def _select_machine(self, context, instance):
         inst_type = instance_types.get_instance_type(instance['instance_type_id'])
 
-        # create a non autocommit session
-        session = get_session_dodai(False)
         bmm_found = None
         reuse = False
+
+        # create a non autocommit session
+        session = get_session_dodai(False)
+        session.begin()
         try:
-            bmms = db.bmm_get_all_by_instance_type(context, inst_type["name"], session):
+            bmms = db.bmm_get_all_by_instance_type(context, inst_type["name"], session)
             for bmm in bmms:
                 if bmm["availability_zone"] != "resource_pool":
                     continue
@@ -384,7 +386,8 @@ class DodaiConnection(driver.ComputeDriver):
 
             if bmm_found:
                 db.bmm_update(context, bmm_found["id"], {"status": "processing"}, session)
-        except:
+        except Exception as ex:
+            LOG.exception(ex)
             session.rollback()
             raise exception.BareMetalMachineUnavailable() 
 

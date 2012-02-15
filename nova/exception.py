@@ -879,7 +879,7 @@ class OFCRegionCreationFailed(RunInstancesFailed):
     message = _("It failed to create region %(region_name)s.")
 
 class OFCRegionSettingOuterPortAssocFailed(RunInstancesFailed):
-    message = _("It failed set outer port association for region %(region_name)s and vlan id %(vlan_id)d.")
+    message = _("It failed set outer port association for region %(region_name)s and vlan id %(vlan_id)s.")
 
 class NotEnoughMachines(RunInstancesFailed):
-    message = _("%(max_count)d machines were required, but only %(available_count)d machines are available.")
+    message = _("%(max_count)s machines were required, but only %(available_count)s machines are available.")
