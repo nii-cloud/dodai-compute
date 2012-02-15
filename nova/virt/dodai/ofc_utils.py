@@ -14,12 +14,22 @@ def update_for_run_instance(service_url, region_name, server_port1, server_port2
     client.service.setServerPort(dpid2, server_port2, region_name)
     client.service.save()
 
-def update_for_terminate_instance(service_url, region_name, server_port1, server_port2, dpid1, dpid2, vlan_id, delete_region):
+def update_for_terminate_instance(service_url, region_name, server_port1, server_port2, dpid1, dpid2, vlan_id):
     client = Client(service_url + "?wsdl")
     client.service.clearServerPort(dpid1, server_port1)
     client.service.clearServerPort(dpid2, server_port2)
-    if not delete_region:
-        client.service.save()
+
+    has_port = False
+    ports = client.service.showPorts(dpid1) + client.service.showPorts(dpid2)
+    for port in ports:
+        if port.type != "ServerPort":
+            continue
+
+        if port.regionName == region_name:
+            has_port = True
+            break
+
+    if has_port:
         return
 
     remove_region(service_url, region_name, vlan_id)
