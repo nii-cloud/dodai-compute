@@ -36,6 +36,7 @@ from nova.virt import images
 from nova import flags
 from nova.virt.dodai import ofc_utils
 from nova.compute import vm_states
+from nova.db.sqlalchemy.session import get_session_dodai
 
 from eventlet import greenthread
 
@@ -181,7 +182,7 @@ class DodaiConnection(driver.ComputeDriver):
         instance_zone, cluster_name, vlan_id, create_cluster = self._parse_zone(instance["availability_zone"])
 
         # update instances table
-        bmm, reuse = self._get_a_bare_metal_machine(context, instance)
+        bmm, reuse = self._select_machine(context, instance)
         instance["display_name"] = bmm["name"]
         instance["availability_zone"] = instance_zone
         db.instance_update(context, 
@@ -348,29 +349,51 @@ class DodaiConnection(driver.ComputeDriver):
     def _get_pxe_mac(self, bmm):
         return "01-%s" % bmm["pxe_mac"].replace(":", "-").lower()
 
-    def _get_a_bare_metal_machine(self, context, instance):
-        inst_type_id = instance['instance_type_id']
-        inst_type = instance_types.get_instance_type(inst_type_id)
+    def _select_machine(self, context, instance):
+        inst_type = instance_types.get_instance_type(instance['instance_type_id'])
 
-        bmms = db.bmm_get_all_by_instance_type_and_zone(context, inst_type["name"], "resource_pool")
-        for bmm in bmms:
-            LOG.debug(bmm["status"])
-            LOG.debug(instance["image_ref"])
-            if bmm["status"] != "active":
-                continue 
+        # create a non autocommit session
+        session = get_session_dodai(False)
+        bmm_found = None
+        reuse = False
+        try:
+            bmms = db.bmm_get_all_by_instance_type(context, inst_type["name"], session):
+            for bmm in bmms:
+                if bmm["availability_zone"] != "resource_pool":
+                    continue
 
-            instance_ref = db.instance_get(context, bmm["instance_id"])
-            LOG.debug(instance_ref["image_ref"])
-            if instance_ref["image_ref"] == instance["image_ref"]:
-                db.bmm_update(context, bmm["id"], {"status": "processing"})
-                return bmm, True
+                if bmm["status"] != "active":
+                    continue 
+    
+                instance_ref = db.instance_get(context, bmm["instance_id"])
+                if instance_ref["image_ref"] != instance["image_ref"]:
+                    continue
 
-        for bmm in db.bmm_get_all_by_instance_type(context, inst_type["name"]):
-            if bmm["status"] != "used" and bmm["status"] != "processing":
-                db.bmm_update(context, bmm["id"], {"status": "processing"})
-                return bmm, False
+                bmm_found = bmm
+                reuse = True
+                break
+   
+            if not bmm_found:
+                for bmm in bmms:
+                    if bmm["status"] == "used" or bmm["status"] == "processing":
+                        continue
 
-        raise exception.BareMetalMachineUnavailable()  
+                    bmm_found = bmm
+                    reuse = False
+                    break
+
+            if bmm_found:
+                db.bmm_update(context, bmm_found["id"], {"status": "processing"}, session)
+        except:
+            session.rollback()
+            raise exception.BareMetalMachineUnavailable() 
+
+        session.commit()
+
+        if bmm_found:
+            return bmm_found, reuse
+
+        raise exception.BareMetalMachineUnavailable()
 
     def _get_cobbler_instance_path(self, instance, file_name = ""):
         return os.path.join(FLAGS.cobbler_path,
