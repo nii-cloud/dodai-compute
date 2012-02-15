@@ -129,10 +129,10 @@ setup(name='nova',
                'bin/dodai-db-all',
                'bin/dodai-db-create',
                'bin/dodai-db-drop',
-               'bin/dodai-db-init'
-               'bin/dodai-db-machine-reset'
-               'bin/dodai-db-show'
-               'bin/dodai-instances-remove'
+               'bin/dodai-db-init',
+               'bin/dodai-db-machine-reset',
+               'bin/dodai-db-show',
+               'bin/dodai-instances-remove',
                'bin/nova-network',
                'bin/nova-objectstore',
                'bin/nova-scheduler',

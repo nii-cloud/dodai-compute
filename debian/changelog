@@ -1,3 +1,9 @@
+nova (2011.3-0ubuntu5) oneiric; urgency=low
+
+  * Fixed bugs found in SI2.
+
+ -- Xiaohua Guan <guanxiaohua2k6@gmail.com>  Wed, 15 Feb 2012 23:52:32 +0900
+
 nova (2011.3-0ubuntu4) oneiric; urgency=low
 
   * Add dodai binaries.
