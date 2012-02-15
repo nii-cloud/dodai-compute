@@ -279,13 +279,13 @@ class DodaiConnection(driver.ComputeDriver):
         self._reboot_or_power_on(bmm["ipmi_ip"])
  
         # wait until starting to install os
-        while self._get_state(instance) != "install":
+        while self._get_state(context, instance) != "install":
             greenthread.sleep(20)
             LOG.debug("Wait until begin to install instance %s." % instance["id"])
         self._cp_template("pxeboot_start", self._get_pxe_boot_file(mac), {})
 
         # wait until starting to reboot 
-        while self._get_state(instance) != "install_reboot":
+        while self._get_state(context, instance) != "install_reboot":
             greenthread.sleep(20)
             LOG.debug("Wait until begin to reboot instance %s after os has been installed." % instance["id"])
         power_manager = PowerManager(bmm["ipmi_ip"])
@@ -296,7 +296,7 @@ class DodaiConnection(driver.ComputeDriver):
         power_manager.on()
 
         # wait until installation of os finished
-        while self._get_state(instance) != "installed":
+        while self._get_state(context, instance) != "installed":
             greenthread.sleep(20)
             LOG.debug("Wait until instance %s installation finished." % instance["id"])
  
@@ -325,7 +325,12 @@ class DodaiConnection(driver.ComputeDriver):
         except Exception as ex:
             LOG.exception(_("OFC exception %s"), unicode(ex))
 
-    def _get_state(self, instance):
+    def _get_state(self, context, instance):
+        # check if instance exists
+        instance_ref = db.instance_get(context, instance["id"])
+        if instance_ref["vm_state"] == vm_states.DELETED:
+            raise InstanceNotFound(instance_id=instance["id"]) 
+
         path = self._get_cobbler_instance_path(instance, "state")
         if not os.path.exists(path):
             return ""
@@ -440,6 +445,8 @@ class DodaiConnection(driver.ComputeDriver):
 
         # update ofc
         self._update_ofc_for_destroy(context, bmm)
+        db.bmm_update(context, bmm["id"], {"vlan_id": None,
+                                           "availability_zone": "resource_pool"})
 
         # begin to delete os
         self._cp_template("delete.sh",
@@ -453,27 +460,19 @@ class DodaiConnection(driver.ComputeDriver):
         self._reboot_or_power_on(bmm["ipmi_ip"])
 
         # wait until starting to delete os
-        while self._get_state(instance) != "deleted":
+        while self._get_state(context, instance) != "deleted":
             greenthread.sleep(20)
             LOG.debug("Wait until data of instance %s was deleted." % instance["id"])
 
         utils.execute("rm", "-rf", self._get_cobbler_instance_path(instance));
 
         # update db
-        db.bmm_update(context, bmm["id"], {"instance_id": None, "service_ip": None})
+        db.bmm_update(context, bmm["id"], {"instance_id": None, 
+                                           "service_ip": None})
 
         return db.bmm_get(context, bmm["id"])
 
     def _update_ofc_for_destroy(self, context, bmm):
-        if bmm["availability_zone"] == "resource_pool":
-            return
-
-        db.bmm_update(context, bmm["id"], {"vlan_id": None,
-                                           "availability_zone": "resource_pool"})
-
-        bmms = db.bmm_get_by_availability_zone(context, bmm["availability_zone"])
-        delete_cluster = len(bmms) == 0 
-
         # update ofc
         try:
             LOG.debug("vlan_id: " + str(bmm["vlan_id"]))
@@ -483,8 +482,7 @@ class DodaiConnection(driver.ComputeDriver):
                                                     bmm["server_port2"],
                                                     bmm["dpid1"],
                                                     bmm["dpid2"],
-                                                    bmm["vlan_id"],
-                                                    delete_cluster)
+                                                    bmm["vlan_id"])
         except Exception as ex:
             LOG.exception(_("OFC exception %s"), unicode(ex))
 

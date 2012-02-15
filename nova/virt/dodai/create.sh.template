@@ -10,8 +10,8 @@ function partition_and_format {
 
   sda2_end=`expr $root_size \* 1000 `
   sda3_end=`expr $sda2_end + $swap_size \* 1000`
-  sda4_end=`expr $sda3_end + $ephemeral_size \* 1000`
-  sda5_end=`expr $sda4_end + $kdump_size \* 1000`
+  sda4_end=`expr $sda3_end + $kdump_size \* 1000`
+  sda5_end=`expr $sda4_end + $ephemeral_size \* 1000`
 
   parted /dev/sda mkpart primary 0 5
   parted /dev/sda mkpart primary 5 $sda2_end 
@@ -22,21 +22,21 @@ function partition_and_format {
 
   sleep 5
 
-  mkfs.ext4 /dev/sda4
+  mkfs.ext4 /dev/sda5
   parted /dev/sda print
 }
 
 function copy_fs {
-  mkdir /mnt/sda4
-  mount /dev/sda4 /mnt/sda4
+  mkdir /mnt/sda5
+  mount /dev/sda5 /mnt/sda5
 
-  wget -O /mnt/sda4/image http://$cobbler/cobbler/images/$image_id
+  wget -O /mnt/sda5/image http://$cobbler/cobbler/images/$image_id
   mkdir /mnt/image
-  mount -o loop -t ext4 /mnt/sda4/image /mnt/image
+  mount -o loop -t ext4 /mnt/sda5/image /mnt/image
 
-  if [[ -n `file /mnt/sda4/image | grep -i ext3` ]]; then
+  if [[ -n `file /mnt/sda5/image | grep -i ext3` ]]; then
      MKFS="mkfs.ext3"
-  elif [[ -n `file /mnt/sda4/image | grep -i ext4` ]]; then
+  elif [[ -n `file /mnt/sda5/image | grep -i ext4` ]]; then
      MKFS="mkfs.ext4"
   else
      MKFS="mkfs.ext3"
@@ -57,9 +57,9 @@ function copy_fs {
      MKFS="mkfs.ext3"
   fi
 
-  umount /mnt/sda4/image
-  umount /mnt/sda4
-  $MKFS /dev/sda4
+  umount /mnt/sda5/image
+  umount /mnt/sda5
+  $MKFS /dev/sda5
 }
 
 function set_hostname {
@@ -84,6 +84,11 @@ function grub_install {
   mount -t proc none /mnt/sda2/proc
   echo I | chroot /mnt/sda2 parted /dev/sda set 1 bios_grub on
   chroot /mnt/sda2 grub-install /dev/sda
+}
+
+function sync_time {
+  chroot /mnt/sda2 ntpupdate $cobbler
+  chroot /mnt/sda2 hwclock --systohc
 }
 
 function notify {
@@ -112,6 +117,7 @@ copy_fs
 set_hostname
 create_files
 grub_install
+sync_time
 
 notify "install_reboot"
 
