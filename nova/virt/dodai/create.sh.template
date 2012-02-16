@@ -8,10 +8,17 @@ function partition_and_format {
     parted /dev/sda rm $i > /dev/null 2>&1
   done
 
+  total_size_mb=`parted /dev/sda -s unit MB print | grep Disk | cut -f3 -d " " | cut -f1 -d "M"`
+
   sda2_end=`expr $root_size \* 1000 `
   sda3_end=`expr $sda2_end + $swap_size \* 1000`
   sda4_end=`expr $sda3_end + $kdump_size \* 1000`
-  sda5_end=`expr $sda4_end + $ephemeral_size \* 1000`
+
+  if [ $ephemeral_size -eq 0 ]; then
+    sda5_end=`expr $total_size_mb`
+  else
+    sda5_end=`expr $sda4_end + $ephemeral_size \* 1000`
+  fi
 
   parted /dev/sda mkpart primary 0 5
   parted /dev/sda mkpart primary 5 $sda2_end 
@@ -22,21 +29,23 @@ function partition_and_format {
 
   sleep 5
 
-  mkfs.ext4 /dev/sda5
+  mkfs.ext3 /dev/sda4
   parted /dev/sda print
 }
 
 function copy_fs {
-  mkdir /mnt/sda5
-  mount /dev/sda5 /mnt/sda5
+  image_dev=sda4
 
-  wget -O /mnt/sda5/image http://$cobbler/cobbler/images/$image_id
+  mkdir /mnt/$image_dev
+  mount /dev/$image_dev /mnt/$image_dev
+
+  wget -O /mnt/$image_dev/image http://$cobbler/cobbler/images/$image_id
   mkdir /mnt/image
-  mount -o loop -t ext4 /mnt/sda5/image /mnt/image
+  mount -o loop -t ext4 /mnt/$image_dev/image /mnt/image
 
-  if [[ -n `file /mnt/sda5/image | grep -i ext3` ]]; then
+  if [[ -n `file /mnt/$image_dev/image | grep -i ext3` ]]; then
      MKFS="mkfs.ext3"
-  elif [[ -n `file /mnt/sda5/image | grep -i ext4` ]]; then
+  elif [[ -n `file /mnt/$image_dev/image | grep -i ext4` ]]; then
      MKFS="mkfs.ext4"
   else
      MKFS="mkfs.ext3"
@@ -56,10 +65,11 @@ function copy_fs {
   else
      MKFS="mkfs.ext3"
   fi
-
-  umount /mnt/sda5/image
-  umount /mnt/sda5
   $MKFS /dev/sda5
+
+  umount /mnt/image
+  rm -rf /mnt/$image_dev/image
+  umount /mnt/$image_dev
 }
 
 function set_hostname {
