@@ -80,6 +80,7 @@ function set_hostname {
 function create_files {
   mkdir /mnt/sda2/etc/dodai
   echo "wget http://$cobbler:$monitor_port/$instance_id/installed -q" > /mnt/sda2/etc/dodai/update_state
+
   echo $pxe_ip > /mnt/sda2/etc/dodai/pxe_ip
   echo $pxe_mac > /mnt/sda2/etc/dodai/pxe_mac
   echo $storage_ip > /mnt/sda2/etc/dodai/storage_ip
@@ -96,9 +97,14 @@ function grub_install {
   chroot /mnt/sda2 grub-install /dev/sda
 }
 
+function setup_network {
+  chroot /mnt/sda2 /usr/local/sbin/setup-network.sh $service_mac1 $service_mac2
+}
+
+
 function sync_time {
-  chroot /mnt/sda2 ntpdate $cobbler
-  chroot /mnt/sda2 hwclock --systohc
+  ntpdate $cobbler
+  #chroot /mnt/sda2 hwclock --systohc
 }
 
 function notify {
@@ -119,6 +125,8 @@ swap_size=SWAP_SIZE
 ephemeral_size=EPHEMERAL_SIZE
 kdump_size=KDUMP_SIZE
 image_type=IMAGE_TYPE
+service_mac1=SERVICE_MAC1
+service_mac2=SERVICE_MAC2
 
 notify "install"
 
@@ -127,6 +135,7 @@ copy_fs
 set_hostname
 create_files
 grub_install
+setup_network
 #sync_time
 
 notify "install_reboot"
