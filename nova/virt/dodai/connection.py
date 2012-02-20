@@ -189,6 +189,10 @@ class DodaiConnection(driver.ComputeDriver):
                            instance["id"], 
                            {"display_name": bmm["name"],
                             "availability_zone": instance_zone})
+        if vlan_id:
+            db.bmm_update(context, bmm["id"], {"availability_zone": cluster_name, 
+                                               "vlan_id": vlan_id,
+                                               "service_ip": None})
  
         if instance_zone == "resource_pool":
             self._install_machine(context, instance, bmm, cluster_name, vlan_id)
@@ -198,10 +202,8 @@ class DodaiConnection(driver.ComputeDriver):
                 db.instance_destroy(context, bmm["instance_id"])
 
             if reuse:
-                db.bmm_update(context, bmm["id"], {"availability_zone": cluster_name, 
-                                                   "status": "used", 
-                                                   "instance_id": instance["id"],
-                                                   "vlan_id": vlan_id}) 
+                db.bmm_update(context, bmm["id"], {"status": "used", 
+                                                   "instance_id": instance["id"]}) 
             else:
                 self._install_machine(context, instance, bmm, cluster_name, vlan_id)
 
@@ -306,11 +308,7 @@ class DodaiConnection(driver.ComputeDriver):
         else:
             status = "used"
 
-        db.bmm_update(context, bmm["id"], 
-                               {"availability_zone": cluster_name,
-                                "vlan_id": vlan_id,
-                                "service_ip": None,
-                                "status": status})
+        db.bmm_update(context, bmm["id"], {"status": status})
 
         if update_instance:
             db.instance_update(context, instance["id"], {"vm_state": vm_states.ACTIVE})
