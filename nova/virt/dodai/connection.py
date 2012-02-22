@@ -253,6 +253,8 @@ class DodaiConnection(driver.ComputeDriver):
         pxe_mac = bmm["pxe_mac"] or "None"
         storage_ip = bmm["storage_ip"] or "None"
         storage_mac = bmm["storage_mac"] or "None"
+        service_mac1 = bmm["service_mac1"] or "None"
+        service_mac2 = bmm["service_mac2"] or "None"
 
         instance_path = self._get_cobbler_instance_path(instance) 
         if not os.path.exists(instance_path):
@@ -269,8 +271,8 @@ class DodaiConnection(driver.ComputeDriver):
                            "STORAGE_MAC": storage_mac,
                            "PXE_IP": pxe_ip, 
                            "PXE_MAC": pxe_mac,
-                           "SERVICE_MAC1": bmm["service_mac1"],
-                           "SERVICE_MAC2": bmm["service_mac2"],
+                           "SERVICE_MAC1": service_mac1,
+                           "SERVICE_MAC2": service_mac2,
                            "IMAGE_TYPE": image_type,
                            "MONITOR_PORT": FLAGS.dodai_monitor_port,
                            "ROOT_SIZE": FLAGS.dodai_partition_root_gb,
