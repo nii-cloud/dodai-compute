@@ -18,18 +18,15 @@ def update_for_terminate_instance(service_url, region_name, server_port1, server
     client.service.clearServerPort(dpid1, server_port1)
     client.service.clearServerPort(dpid2, server_port2)
 
-    has_port = False
-    ports = client.service.showPorts(dpid1) + client.service.showPorts(dpid2)
-    for port in ports:
-        if port.type != "ServerPort":
-            continue
+    dpid_datas = client.service.showSwitchDatapathId()
+    for dpid_data in dpid_datas:
+        ports = client.service.showPorts(dpid_data.dpid)
+        for port in ports:
+            if port.type != "ServerPort":
+                continue
 
-        if port.regionName == region_name:
-            has_port = True
-            break
-
-    if has_port:
-        return
+            if port.regionName == region_name:
+                return
 
     remove_region(service_url, region_name, vlan_id)
 
