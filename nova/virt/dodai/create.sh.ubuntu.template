@@ -101,10 +101,13 @@ function setup_network {
   chroot /mnt/sda2 /usr/local/sbin/setup-network.sh $service_mac1 $service_mac2
 }
 
-
 function sync_time {
   ntpdate $cobbler
-  #chroot /mnt/sda2 hwclock --systohc
+  hwclock --systohc
+}
+
+function sync_target_machine_time {
+  chroot /mnt/sda2 ntpdate $cobbler
 }
 
 function notify {
@@ -130,13 +133,14 @@ service_mac2=SERVICE_MAC2
 
 notify "install"
 
+sync_time
 partition_and_format
 copy_fs
 set_hostname
 create_files
 grub_install
 setup_network
-#sync_time
+sync_target_machine_time
 
 notify "install_reboot"
 
