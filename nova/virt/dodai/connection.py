@@ -383,29 +383,40 @@ class DodaiConnection(driver.ComputeDriver):
         session.begin()
         try:
             bmms = db.bmm_get_all_by_instance_type(context, inst_type["name"], session)
-            for bmm in bmms:
-                if bmm["availability_zone"] != "resource_pool":
-                    continue
-
-                if bmm["status"] != "active":
-                    continue 
-    
-                instance_ref = db.instance_get(context, bmm["instance_id"])
-                if instance_ref["image_ref"] != instance["image_ref"]:
-                    continue
-
-                bmm_found = bmm
-                reuse = True
-                break
-   
-            if not bmm_found:
+            if instance["availability_zone"] == "resource_pool": #Add a machine to resource pool.
                 for bmm in bmms:
-                    if bmm["status"] == "used" or bmm["status"] == "processing":
+                    if bmm["availability_zone"] != "resource_pool":
+                        continue
+
+                    if bmm["status"] != "inactive":
                         continue
 
                     bmm_found = bmm
-                    reuse = False
                     break
+            else:
+                for bmm in bmms:
+                    if bmm["availability_zone"] != "resource_pool":
+                        continue
+    
+                    if bmm["status"] != "active":
+                        continue 
+        
+                    instance_ref = db.instance_get(context, bmm["instance_id"])
+                    if instance_ref["image_ref"] != instance["image_ref"]:
+                        continue
+    
+                    bmm_found = bmm
+                    reuse = True
+                    break
+   
+                if not bmm_found:
+                    for bmm in bmms:
+                        if bmm["status"] == "used" or bmm["status"] == "processing":
+                            continue
+    
+                        bmm_found = bmm
+                        reuse = False
+                        break
 
             if bmm_found:
                 db.bmm_update(context, bmm_found["id"], {"status": "processing"}, session)

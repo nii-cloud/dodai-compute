@@ -519,34 +519,37 @@ class ComputeManager(manager.SchedulerDependentManager):
     def terminate_instance(self, context, instance_id):
         """Terminate an instance on this host."""
         def _inner_terminate_instance():
-            self._instance_update(context,
-                                  instance_id,
-                                  vm_state=vm_states.DELETED,
-                                  task_state=None,
-                                  terminated_at=utils.utcnow())
-
-            bmm = self._shutdown_instance(context, instance_id, 'Terminating')
-            instance = self.db.instance_get(context.elevated(), instance_id)
-            instance_new = db.instance_create(context, 
-                {"availability_zone": "resource_pool",
-                 "user_id": instance["user_id"],
-                 "project_id": instance["project_id"],
-                 "kernel_id": instance["kernel_id"],
-                 "host": instance["host"],
-                 "display_name": instance["display_name"],
-                 "instance_type_id": instance["instance_type_id"],
-                 "vcpus": instance["vcpus"],
-                 "vm_state": vm_states.BUILDING,
-                 "image_ref": FLAGS.dodai_default_image})
-
-            self.db.instance_destroy(context, instance_id)
+            try:
+                self._instance_update(context,
+                                      instance_id,
+                                      vm_state=vm_states.DELETED,
+                                      task_state=None,
+                                      terminated_at=utils.utcnow())
     
-            usage_info = utils.usage_from_instance(instance)
-            notifier.notify('compute.%s' % self.host,
-                            'compute.instance.delete',
-                            notifier.INFO, usage_info)
-
-            self.driver.add_to_resource_pool(context, instance_new, bmm)
+                bmm = self._shutdown_instance(context, instance_id, 'Terminating')
+                instance = self.db.instance_get(context.elevated(), instance_id)
+                instance_new = db.instance_create(context, 
+                    {"availability_zone": "resource_pool",
+                     "user_id": instance["user_id"],
+                     "project_id": instance["project_id"],
+                     "kernel_id": instance["kernel_id"],
+                     "host": instance["host"],
+                     "display_name": instance["display_name"],
+                     "instance_type_id": instance["instance_type_id"],
+                     "vcpus": instance["vcpus"],
+                     "vm_state": vm_states.BUILDING,
+                     "image_ref": FLAGS.dodai_default_image})
+    
+                self.db.instance_destroy(context, instance_id)
+        
+                usage_info = utils.usage_from_instance(instance)
+                notifier.notify('compute.%s' % self.host,
+                                'compute.instance.delete',
+                                notifier.INFO, usage_info)
+    
+                self.driver.add_to_resource_pool(context, instance_new, bmm)
+            except Exception as ex:
+                LOG.exception(ex)
 
         greenthread.spawn(_inner_terminate_instance)
 

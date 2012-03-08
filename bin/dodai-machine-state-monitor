@@ -21,7 +21,6 @@
 def application(envs, start_response):
     url = envs["PATH_INFO"]
     tmp, instance_id, state = url.split("/")
-    print "State of instance %s: %s" % (instance_id, state)
 
     f = open('/var/www/cobbler/instances/%s/state' % instance_id, 'w')
     f.write(state)

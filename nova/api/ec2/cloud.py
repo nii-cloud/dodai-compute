@@ -1423,17 +1423,21 @@ class CloudController(object):
             
             return create_cluster, cluster_name, vlan_id
 
-        def _validate_max_count(max_count):
+        def _validate_max_count(max_count, zone):
             bmms = db.bmm_get_all_by_instance_type(context, kwargs.get("instance_type", None))
             available_count = 0
             for bmm in bmms:
-                if bmm["status"] == "inactive" or bmm["status"] == "active":
-                    available_count += 1
+                if zone == "resource_pool":
+                    if bmm["status"] == "inactive":
+                        available_count += 1
+                else:
+                    if bmm["status"] == "inactive" or bmm["status"] == "active":
+                        available_count += 1
 
             if available_count < max_count:
                 raise exception.NotEnoughMachines(max_count=max_count, available_count=available_count)
 
-        _validate_max_count(max_count)
+        _validate_max_count(max_count, zone)
         create_cluster, cluster_name, vlan_id = _validate_zone(zone)
         if create_cluster and cluster_name != "resource_pool" :
             ofc_utils.create_region(FLAGS.ofc_service_url, cluster_name, vlan_id) 
