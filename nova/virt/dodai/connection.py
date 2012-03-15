@@ -260,27 +260,7 @@ class DodaiConnection(driver.ComputeDriver):
         if not os.path.exists(instance_path):
             utils.execute('mkdir', '-p', instance_path)
 
-        if instance["image_ref"] == 10 or instance["image_ref"] == "10":
-            self._cp_template("create.sh.ubuntu", 
-                          self._get_cobbler_instance_path(instance, "create.sh"),
-                          {"INSTANCE_ID": instance["id"], 
-                           "IMAGE_ID": instance["image_ref"], 
-                           "COBBLER": FLAGS.cobbler, 
-                           "HOST_NAME": bmm["name"], 
-                           "STORAGE_IP": storage_ip,
-                           "STORAGE_MAC": storage_mac,
-                           "PXE_IP": pxe_ip, 
-                           "PXE_MAC": pxe_mac,
-                           "SERVICE_MAC1": service_mac1,
-                           "SERVICE_MAC2": service_mac2,
-                           "IMAGE_TYPE": image_type,
-                           "MONITOR_PORT": FLAGS.dodai_monitor_port,
-                           "ROOT_SIZE": FLAGS.dodai_partition_root_gb,
-                           "SWAP_SIZE": FLAGS.dodai_partition_swap_gb,
-                           "EPHEMERAL_SIZE": FLAGS.dodai_partition_ephemeral_gb,
-                           "KDUMP_SIZE": FLAGS.dodai_partition_kdump_gb})
-        else:
-            self._cp_template("create.sh", 
+        self._cp_template("create.sh", 
                           self._get_cobbler_instance_path(instance, "create.sh"),
                           {"INSTANCE_ID": instance["id"], 
                            "IMAGE_ID": instance["image_ref"], 
