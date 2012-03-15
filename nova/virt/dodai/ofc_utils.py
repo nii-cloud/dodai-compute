@@ -48,6 +48,7 @@ def create_region(service_url, region_name, vlan_id):
         client.service.save()
     except:
         client.service.destroyRegion(region_name)
+        client.service.save()
         raise exception.OFCRegionSettingOuterPortAssocFailed(region_name=region_name, vlan_id=vlan_id)
 
 def remove_region(service_url, region_name, vlan_id):
