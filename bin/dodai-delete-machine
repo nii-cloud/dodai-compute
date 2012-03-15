@@ -1,0 +1,43 @@
+#!/usr/bin/python
+
+import sys
+
+from nova import db
+from nova import flags
+from nova.db.sqlalchemy.session import get_session
+from nova import utils
+from nova.db.sqlalchemy import models
+
+from sqlalchemy.sql.expression import literal_column
+
+if len(sys.argv) < 2:
+  print "Argument machine_name is needed."
+  sys.exit()
+
+name = sys.argv[1]
+
+flags.FLAGS(["", "--flagfile=/etc/nova/nova.conf"])
+FLAGS = flags.FLAGS
+
+bmm = db.bmm_get_by_name(None, name)
+db.bmm_destroy(None, bmm.id)
+
+if bmm.instance_id:
+  instance_id = bmm.instance_id
+  session = get_session()
+  with session.begin():
+    session.query(models.Instance).\
+      filter_by(id=instance_id).\
+      update({'deleted': True,
+              'deleted_at': utils.utcnow(),
+              'updated_at': literal_column('updated_at')})
+    session.query(models.SecurityGroupInstanceAssociation).\
+      filter_by(instance_id=instance_id).\
+      update({'deleted': True,
+              'deleted_at': utils.utcnow(),
+              'updated_at': literal_column('updated_at')})
+    session.query(models.InstanceMetadata).\
+      filter_by(instance_id=instance_id).\
+      update({'deleted': True,
+              'deleted_at': utils.utcnow(),
+              'updated_at': literal_column('updated_at')})

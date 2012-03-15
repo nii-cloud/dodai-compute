@@ -7,5 +7,6 @@ usr/bin/dodai-db-init
 usr/bin/dodai-db-machine-reset
 usr/bin/dodai-db-show
 usr/bin/dodai-instances-remove
+usr/bin/dodai-delete-machine
 debian/nova_sudoers etc/sudoers.d
 debian/nova.conf    etc/nova
