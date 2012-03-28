@@ -1,7 +1,0 @@
-description "Dodai machine state monitor"
-author "Xiaohua Guan <guanxiaohua2k6@gmail.com>"
-
-start on (filesystem and net-device-up IFACE!=lo)
-stop on runlevel [016]
-
-exec su -c "dodai-machine-state-monitor >> /var/log/nova/dodai-machine-state-monitor.log 2>&1" nova
