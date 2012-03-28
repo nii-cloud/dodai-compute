@@ -1,0 +1,4 @@
+/var/log/nova/dodai-machine-state-monitor.log {
+    daily
+    missingok
+}
