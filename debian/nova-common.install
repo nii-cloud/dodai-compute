@@ -10,3 +10,4 @@ usr/bin/dodai-instances-remove
 usr/bin/dodai-delete-machine
 debian/nova_sudoers etc/sudoers.d
 debian/nova.conf    etc/nova
+debian/dodai-machine-state-monitor.conf etc/init
