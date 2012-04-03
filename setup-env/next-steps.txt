@@ -1,0 +1,46 @@
+## Add machines to dodai db.
+sudo nova-manage dodai_machine create
+
+
+## Add switches to dodai db.
+sudo nova-manage dodai_switch create
+
+
+## Create project and user.
+sudo nova-manage user create USER_NAME
+sudo nova-manage project create PROJECT_NAME USER_NAME
+
+
+## Add image type.
+# FLAVOR_ID should be >= 6 and should not be duplicated.
+sudo nova-manage flavor create IMAGE_TYPE_NAME MEMORY_SIZE_MB CPU_CORE_NUMBER DISK_SIZE_GB FLAVOR_ID 0 0 0
+
+
+## Download credential files and export environment variables for euca2ools.
+sudo nova-manage project zipfile PROJECT_NAME USER_NAME
+unzip nova.zip
+. novarc
+
+
+## Add image.
+## You can add image with glance command or euca2ools.
+
+# Add image with glance command
+# IMAGE_NAME should be dodai-deploy for dodai deploy server or node for other servers.
+glance add name=IMAGE_NAME is_public=true container_format=ami disk_format=ami kernel_id=1 < /PATH/TO/IMAGE/FILE
+
+# Add image with euca2ools
+# BUCKET_NAME should be dodai-deploy for dodai deploy server or node for other servers.
+euca-bundle-image --kernel aki-00000001 -i /PATH/TO/IMAGE/FILE
+euca-upload-bundle -b BUCKET_NAME -m /PATH/TO/MANIFEST/FILE
+euca-register IMAGE_LOCATION
+
+# Change the image as public image. It is only necessary for images added with euca2ools.
+# The IMAGE_ID should be the number part of the id which can be confirmed with command euca-describe-images.
+sudo sqlite3 /var/lib/glance/glance.sqlite 'update images set is_public=1 where id=IMAGE_ID;'
+
+
+## Change setting of nova if it is necessary.
+sudo vim /etc/nova/nova.conf
+sudo restart nova-compute
+sudo restart nova-api
