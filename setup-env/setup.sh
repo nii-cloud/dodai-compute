@@ -55,6 +55,7 @@ COBBLER_PRESEED
 }
 
 install_dodai_compute() {
+  apt-get install rabbitmq-server euca2ools -y
   apt-get install python-novaclient python-nova nova-common nova-api nova-objectstore nova-volume nova-compute nova-compute-kvm nova-network nova-scheduler -y
   apt-get install python-suds -y
 
@@ -163,6 +164,7 @@ do_test() {
 
   echo "Test to use euca2ools."
   nova-manage project zipfile test_proj test_user ~/nova.zip
+  apt-get install unzip -y
   unzip -d ~/nova ~/nova.zip
   . ~/nova/novarc
   euca-describe-images
