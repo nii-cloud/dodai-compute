@@ -10,7 +10,7 @@ install() {
 
 install_prerequired() {
   apt-get update
-  apt-get install iscsitarget libgpm2 libpython2.7 libreadline5 libsigsegv2 socat vim-runtime liberror-perl git -y
+  apt-get install iscsitarget libgpm2 libpython2.7 libreadline5 libsigsegv2 socat vim-runtime liberror-perl ntp git -y
 }
 
 install_mysql() {
