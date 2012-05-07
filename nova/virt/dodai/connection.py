@@ -281,7 +281,9 @@ class DodaiConnection(driver.ComputeDriver):
 
         self._cp_template("pxeboot_create",
                           self._get_pxe_boot_file(mac),
-                          {"INSTANCE_ID": instance["id"], "COBBLER": FLAGS.cobbler})
+                          {"INSTANCE_ID": instance["id"], 
+                           "COBBLER": FLAGS.cobbler,
+                           "PXE_MAC": pxe_mac})
 
         LOG.debug("Reboot or power on.")
         self._reboot_or_power_on(bmm["ipmi_ip"])
