@@ -498,7 +498,9 @@ class DodaiConnection(driver.ComputeDriver):
                            "MONITOR_PORT": FLAGS.dodai_monitor_port})
         self._cp_template("pxeboot_delete",
                           self._get_pxe_boot_file(mac),
-                          {"INSTANCE_ID": instance["id"], "COBBLER": FLAGS.cobbler})
+                          {"INSTANCE_ID": instance["id"], 
+                           "COBBLER": FLAGS.cobbler,
+                           "PXE_MAC": pxe_mac})
         self._reboot_or_power_on(bmm["ipmi_ip"])
 
         # wait until starting to delete os
