@@ -79,7 +79,7 @@ function set_hostname {
 
 function create_files {
   mkdir /mnt/sda2/etc/dodai
-  echo "wget http://$cobbler:$monitor_port/$instance_id/installed -q" > /mnt/sda2/etc/dodai/update_state
+  echo "curl http://$cobbler:$monitor_port/$instance_id/installed > /var/log/dodai/update_state.log 2>&1" > /mnt/sda2/etc/dodai/update_state
 
   echo $pxe_ip > /mnt/sda2/etc/dodai/pxe_ip
   echo $pxe_mac > /mnt/sda2/etc/dodai/pxe_mac
@@ -111,7 +111,7 @@ function sync_target_machine_time {
 }
 
 function notify {
-  wget http://$cobbler:$monitor_port/$instance_id/$1 -q
+  curl http://$cobbler:$monitor_port/$instance_id/$1
 }
 
 cobbler=COBBLER
