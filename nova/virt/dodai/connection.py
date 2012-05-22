@@ -275,12 +275,6 @@ class DodaiConnection(driver.ComputeDriver):
         if not os.path.exists(instance_path):
             utils.execute('mkdir', '-p', instance_path)
 
-        if instance['key_data']:
-            key = str(instance['key_data'])
-            keyfile = os.path.join(instance_path, 'key')
-            utils.execute('tee', '-a', keyfile,
-                          process_input='\n' + key.strip() + '\n', run_as_root=True)
-
         self._cp_template("create.sh", 
                           self._get_cobbler_instance_path(instance, "create.sh"),
                           {"INSTANCE_ID": instance["id"], 
