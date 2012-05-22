@@ -24,6 +24,7 @@ A dodai hypervisor.
 import os
 import os.path
 import tempfile
+import httplib, urllib
 
 from nova import exception
 from nova import log as logging
@@ -206,6 +207,20 @@ class DodaiConnection(driver.ComputeDriver):
                                                    "instance_id": instance["id"]}) 
             else:
                 self._install_machine(context, instance, bmm, cluster_name, vlan_id)
+            
+            if instance["key_data"]:
+                self._inject_key(bmm["pxe_ip"], str(instance["key_data"]))
+
+    def _inject_key(self, pxe_ip, key_data):
+        conn = httplib.HTTPConnection(pxe_ip, "4567")
+        params = urllib.urlencode({"key_data": key_data.strip()})
+        headers = {'Content-type': 'application/x-www-form-urlencoded', 'Accept': 'text/plain'}
+        conn.request("PUT", "/services/dodai-instance/key.json", params, headers)
+        response = conn.getresponse()
+        data = response.read()
+        LOG.debug(response.status)
+        LOG.debug(response.reason)
+        LOG.debug(data)
 
     def _parse_zone(self, zone):
         create_cluster = False
@@ -259,6 +274,12 @@ class DodaiConnection(driver.ComputeDriver):
         instance_path = self._get_cobbler_instance_path(instance) 
         if not os.path.exists(instance_path):
             utils.execute('mkdir', '-p', instance_path)
+
+        if instance['key_data']:
+            key = str(instance['key_data'])
+            keyfile = os.path.join(instance_path, 'key')
+            utils.execute('tee', '-a', keyfile,
+                          process_input='\n' + key.strip() + '\n', run_as_root=True)
 
         self._cp_template("create.sh", 
                           self._get_cobbler_instance_path(instance, "create.sh"),
@@ -500,7 +521,7 @@ class DodaiConnection(driver.ComputeDriver):
                           self._get_pxe_boot_file(mac),
                           {"INSTANCE_ID": instance["id"], 
                            "COBBLER": FLAGS.cobbler,
-                           "PXE_MAC": pxe_mac})
+                           "PXE_MAC": bmm["pxe_mac"]})
         self._reboot_or_power_on(bmm["ipmi_ip"])
 
         # wait until starting to delete os
