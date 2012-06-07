@@ -1,0 +1,6 @@
+DEFAULT pxeboot
+TIMEOUT 20
+PROMPT 0
+LABEL pxeboot
+	KERNEL /os-duper/vmlinuz0
+	APPEND initrd=/os-duper/initrd0.img root=live:/os-duper.iso root=/os-duper.iso rootfstype=auto ro liveimg quiet rhgb rd_NO_LUKS rd_NO_MD rd_NO_DM dodai_script=http://COBBLER/cobbler/instances/INSTANCE_ID/ACTION.sh dodai_pxe_mac=PXE_MAC

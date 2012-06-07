@@ -294,11 +294,12 @@ class DodaiConnection(driver.ComputeDriver):
                            "EPHEMERAL_SIZE": FLAGS.dodai_partition_ephemeral_gb,
                            "KDUMP_SIZE": FLAGS.dodai_partition_kdump_gb})
 
-        self._cp_template("pxeboot_create",
+        self._cp_template("pxeboot_action",
                           self._get_pxe_boot_file(mac),
                           {"INSTANCE_ID": instance["id"], 
                            "COBBLER": FLAGS.cobbler,
-                           "PXE_MAC": pxe_mac})
+                           "PXE_MAC": pxe_mac,
+                           "ACTION": "create"})
 
         LOG.debug("Reboot or power on.")
         self._reboot_or_power_on(bmm["ipmi_ip"])
@@ -511,11 +512,12 @@ class DodaiConnection(driver.ComputeDriver):
                           {"INSTANCE_ID": instance["id"],
                            "COBBLER": FLAGS.cobbler,
                            "MONITOR_PORT": FLAGS.dodai_monitor_port})
-        self._cp_template("pxeboot_delete",
+        self._cp_template("pxeboot_action",
                           self._get_pxe_boot_file(mac),
                           {"INSTANCE_ID": instance["id"], 
                            "COBBLER": FLAGS.cobbler,
-                           "PXE_MAC": bmm["pxe_mac"]})
+                           "PXE_MAC": bmm["pxe_mac"],
+                           "ACTION": "delete"})
         self._reboot_or_power_on(bmm["ipmi_ip"])
 
         # wait until starting to delete os
